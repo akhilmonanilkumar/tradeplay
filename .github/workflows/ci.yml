@@ -25,8 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -43,26 +43,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: false
-          load: true
-          tags: tradeplay:ci
-          build-args: |
-            NEXT_PUBLIC_SUPABASE_URL=${{ env.NEXT_PUBLIC_SUPABASE_URL }}
-            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ env.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - uses: actions/checkout@v5
+      - name: Build image (classic builder, stays in the local image store)
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
+            --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY="$NEXT_PUBLIC_SUPABASE_ANON_KEY" \
+            -t tradeplay:ci .
+          docker image ls tradeplay
       - name: Smoke test container
         run: |
-          docker run -d --name t -p 3000:3000 --read-only --tmpfs /tmp --cap-drop ALL tradeplay:ci
-          for i in $(seq 1 30); do
-            s=$(docker inspect -f '{{.State.Health.Status}}' t); [ "$s" = healthy ] && break; sleep 2
+          set -x
+          trap 'echo "::group::container logs"; docker ps -a; docker logs t 2>&1 | tail -80 || true; docker inspect t --format "{{json .State}}" || true; echo "::endgroup::"' EXIT
+          docker run -d --name t -p 3000:3000 --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges tradeplay:ci
+          status=starting
+          for i in $(seq 1 45); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' t 2>/dev/null || echo missing)
+            [ "$status" = healthy ] && break
+            [ "$(docker inspect -f '{{.State.Running}}' t)" = true ] || break
+            sleep 2
           done
-          docker inspect -f '{{.State.Health.Status}}' t | grep -qx healthy
+          test "$status" = healthy
           curl -fsS http://127.0.0.1:3000/api/health
-          curl -fsSI http://127.0.0.1:3000/login | grep -i "content-security-policy: .*nonce-"
-          docker exec t whoami | grep -qx app
+          curl -fsSI http://127.0.0.1:3000/login | grep -iE "content-security-policy: .*nonce-"
+          test "$(docker exec t id -un)" = app
