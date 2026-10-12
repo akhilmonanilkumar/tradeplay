@@ -59,22 +59,22 @@ jobs:
             if [ $rc -ne 0 ]; then
               note "exit=$rc step=$STEP"
               note "ps: $(docker ps -a --format '{{.Names}} {{.Status}}' 2>&1)"
-              note "state: $(docker inspect t --format '{{json .State}}' 2>&1)"
-              note "logs: $(docker logs t 2>&1 | tail -30)"
+              note "state: $(docker inspect tp-smoke --format '{{json .State}}' 2>&1)"
+              note "logs: $(docker logs tp-smoke 2>&1 | tail -30)"
             fi
           }
           trap on_exit EXIT
-          STEP=run;     out=$(docker run -d --name t -p 3000:3000 --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges tradeplay:ci 2>&1) || { note "docker run: $out"; exit 125; }
+          STEP=run;     out=$(docker run -d --name tp-smoke -p 3000:3000 --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges tradeplay:ci 2>&1) || { note "docker run: $out"; exit 125; }
           STEP=health
           status=starting
           for i in $(seq 1 45); do
-            status=$(docker inspect -f '{{.State.Health.Status}}' t 2>/dev/null || echo missing)
+            status=$(docker inspect -f '{{.State.Health.Status}}' tp-smoke 2>/dev/null || echo missing)
             [ "$status" = healthy ] && break
-            [ "$(docker inspect -f '{{.State.Running}}' t)" = true ] || break
+            [ "$(docker inspect -f '{{.State.Running}}' tp-smoke)" = true ] || break
             sleep 2
           done
           [ "$status" = healthy ] || { note "health=$status"; exit 1; }
           STEP=curl-health; curl -fsS http://127.0.0.1:3000/api/health
           STEP=csp;         curl -fsSI http://127.0.0.1:3000/login | grep -iE "content-security-policy: .*nonce-"
-          STEP=user;        u=$(docker exec t id -un 2>&1) || { note "exec: $u"; exit 1; }
+          STEP=user;        u=$(docker exec tp-smoke id -un 2>&1) || { note "exec: $u"; exit 1; }
           [ "$u" = app ] || { note "user=$u"; exit 1; }
