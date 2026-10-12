@@ -53,9 +53,19 @@ jobs:
           docker image ls tradeplay
       - name: Smoke test container
         run: |
-          set -x
-          trap 'echo "::group::container logs"; docker ps -a; docker logs t 2>&1 | tail -80 || true; docker inspect t --format "{{json .State}}" || true; echo "::endgroup::"' EXIT
-          docker run -d --name t -p 3000:3000 --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges tradeplay:ci
+          note() { echo "::error title=smoke::$(printf '%s' "$*" | tr '\n' ' ' | cut -c1-900)"; }
+          on_exit() {
+            rc=$?
+            if [ $rc -ne 0 ]; then
+              note "exit=$rc step=$STEP"
+              note "ps: $(docker ps -a --format '{{.Names}} {{.Status}}' 2>&1)"
+              note "state: $(docker inspect t --format '{{json .State}}' 2>&1)"
+              note "logs: $(docker logs t 2>&1 | tail -30)"
+            fi
+          }
+          trap on_exit EXIT
+          STEP=run;     out=$(docker run -d --name t -p 3000:3000 --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges tradeplay:ci 2>&1) || { note "docker run: $out"; exit 125; }
+          STEP=health
           status=starting
           for i in $(seq 1 45); do
             status=$(docker inspect -f '{{.State.Health.Status}}' t 2>/dev/null || echo missing)
@@ -63,7 +73,8 @@ jobs:
             [ "$(docker inspect -f '{{.State.Running}}' t)" = true ] || break
             sleep 2
           done
-          test "$status" = healthy
-          curl -fsS http://127.0.0.1:3000/api/health
-          curl -fsSI http://127.0.0.1:3000/login | grep -iE "content-security-policy: .*nonce-"
-          test "$(docker exec t id -un)" = app
+          [ "$status" = healthy ] || { note "health=$status"; exit 1; }
+          STEP=curl-health; curl -fsS http://127.0.0.1:3000/api/health
+          STEP=csp;         curl -fsSI http://127.0.0.1:3000/login | grep -iE "content-security-policy: .*nonce-"
+          STEP=user;        u=$(docker exec t id -un 2>&1) || { note "exec: $u"; exit 1; }
+          [ "$u" = app ] || { note "user=$u"; exit 1; }
