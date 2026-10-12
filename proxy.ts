@@ -82,6 +82,6 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     // everything except static assets
-    { source: "/((?!_next/static|_next/image|favicon.ico|icon|manifest.webmanifest|sw.js|api/health).*)" },
+    { source: "/((?!_next/static|_next/image|favicon.ico|icon|apple-touch-icon.png|og.png|logo.svg|manifest.webmanifest|sw.js|api/health).*)" },
   ],
 };

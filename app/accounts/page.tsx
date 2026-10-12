@@ -7,32 +7,64 @@ import { accountState, fmtUsd } from "@/lib/calc";
 import { supabase } from "@/lib/supabase";
 import type { Account, Setup, Tier } from "@/lib/types";
 
-const NUM_FIELDS: { key: keyof Account; label: string; hint?: string }[] = [
-  { key: "starting_balance", label: "Starting balance $" },
-  { key: "target_pct", label: "Target %", hint: "Blank for funded" },
-  { key: "max_daily_loss_pct", label: "Firm daily loss %" },
-  { key: "max_overall_loss_pct", label: "Firm max loss %" },
-  { key: "personal_daily_loss_pct", label: "Personal daily stop %" },
-  { key: "max_daily_profit_pct", label: "Daily profit cap %" },
-  { key: "max_trades_per_day", label: "Max trades / day" },
-  { key: "max_losses_per_day", label: "Max losses / day" },
-  { key: "min_rr", label: "Minimum R:R" },
-  { key: "hard_stop_equity", label: "Hard-stop equity $" },
-  { key: "min_profitable_days", label: "Min profitable days" },
-  { key: "contract_size", label: "Contract size", hint: "Gold 100 oz/lot · BTC 1" },
-  { key: "fee_rate", label: "Round-trip fee rate", hint: "BTC Breakout 0.0008" },
-  { key: "loss_streak_n", label: "Loss-streak trigger (n)" },
-  { key: "loss_streak_risk_pct", label: "Risk % on streak" },
+type NumField = { key: keyof Account; label: string; hint?: string };
+const GROUPS: { title: string; fields: NumField[] }[] = [
+  {
+    title: "Balance & firm rules",
+    fields: [
+      { key: "starting_balance", label: "Starting balance $", hint: "Changing it re-bases equity, floors and targets" },
+      { key: "target_pct", label: "Target %", hint: "Blank for funded" },
+      { key: "max_daily_loss_pct", label: "Firm daily loss %" },
+      { key: "max_overall_loss_pct", label: "Firm max loss %" },
+      { key: "min_profitable_days", label: "Min profitable days" },
+    ],
+  },
+  {
+    title: "Your guardrails",
+    fields: [
+      { key: "personal_daily_loss_pct", label: "Personal daily stop %" },
+      { key: "max_daily_profit_pct", label: "Daily profit cap %" },
+      { key: "max_trades_per_day", label: "Max trades / day" },
+      { key: "max_losses_per_day", label: "Max losses / day" },
+      { key: "min_rr", label: "Minimum R:R" },
+      { key: "hard_stop_equity", label: "Hard-stop equity $" },
+      { key: "loss_streak_n", label: "Loss-streak trigger (n)" },
+      { key: "loss_streak_risk_pct", label: "Risk % on streak" },
+    ],
+  },
+  {
+    title: "Sizing",
+    fields: [
+      { key: "contract_size", label: "Contract size", hint: "Gold 100 oz/lot · BTC 1" },
+      { key: "fee_rate", label: "Round-trip fee rate", hint: "BTC Breakout 0.0008" },
+    ],
+  },
 ];
+const NUM_FIELDS: NumField[] = GROUPS.flatMap((g) => g.fields);
 
 function AccountEditor({ account }: { account: Account }) {
-  const { refresh, trades, payouts } = useData();
+  const { refresh, trades, payouts, adjustments, coachDb } = useData();
+  const [sync, setSync] = useState({ balance: "", note: "" });
+  const myAdj = adjustments.filter((x) => x.account_id === account.id);
   const [a, setA] = useState<Account>(account);
   const [ladder, setLadder] = useState<Tier[]>(account.risk_ladder ?? []);
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
   const [err, setErr] = useState<string | null>(null);
   const [payout, setPayout] = useState({ amount: "", paid_at: new Date().toISOString().slice(0, 10), note: "" });
-  const s = accountState(account, trades, payouts);
+  const s = accountState(account, trades, payouts, new Date(), { adjustments });
+  const dirty = JSON.stringify({ ...a, risk_ladder: ladder }) !== JSON.stringify({ ...account, risk_ladder: account.risk_ladder ?? [] });
+
+  async function syncEquity() {
+    const target = numOrNull(sync.balance);
+    if (target == null || target <= 0) return setErr("Enter your broker's current balance");
+    const diff = Math.round((target - s.equity) * 100) / 100;
+    if (!diff) return setErr("Already in sync");
+    const { error } = await supabase.from("balance_adjustments").insert({ account_id: account.id, amount: diff, note: sync.note || `Synced to broker balance ${target}` });
+    if (error) return setErr(error.message);
+    setSync({ balance: "", note: "" });
+    setErr(null);
+    refresh();
+  }
   const myPayouts = payouts.filter((p) => p.account_id === account.id);
 
   useEffect(() => {
@@ -101,6 +133,7 @@ function AccountEditor({ account }: { account: Account }) {
   }
 
   return (
+    <div id={account.id} className="scroll-mt-20">
     <Card
       title={<span className="flex items-center gap-2 normal-case tracking-normal"><span className="text-sm font-semibold text-ink">{account.name}</span><Badge>{account.instrument}</Badge><Badge tone={account.status === "active" ? "up" : "mute"}>{account.status}</Badge></span>}
       action={<span className="num text-sm">{fmtUsd(s.equity)}</span>}
@@ -133,17 +166,24 @@ function AccountEditor({ account }: { account: Account }) {
         <Field label="Daily reset (UTC)" hint="Breakout 00:30 · broker midnight for FX/CFD">
           <input type="time" className="input" value={a.day_reset_utc.slice(0, 5)} onChange={(e) => setA({ ...a, day_reset_utc: `${e.target.value}:00` })} />
         </Field>
-        {NUM_FIELDS.map((f) => (
-          <Field key={f.key} label={f.label} hint={f.hint}>
-            <input
-              className="input num"
-              inputMode="decimal"
-              value={a[f.key] == null ? "" : String(a[f.key])}
-              onChange={(e) => setA({ ...a, [f.key]: numOrNull(e.target.value) })}
-            />
-          </Field>
-        ))}
       </div>
+      {GROUPS.map((g) => (
+        <div key={g.title} className="mt-5">
+          <div className="label mb-2">{g.title}</div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {g.fields.map((f) => (
+              <Field key={f.key} label={f.label} hint={f.hint}>
+                <input
+                  className="input num"
+                  inputMode="decimal"
+                  value={a[f.key] == null ? "" : String(a[f.key])}
+                  onChange={(e) => setA({ ...a, [f.key]: numOrNull(e.target.value) })}
+                />
+              </Field>
+            ))}
+          </div>
+        </div>
+      ))}
 
       <div className="mt-5">
         <div className="label mb-2">Risk ladder — first tier where equity ≥ threshold applies</div>
@@ -165,8 +205,9 @@ function AccountEditor({ account }: { account: Account }) {
       <div className="mt-3 flex items-center justify-between gap-3">
         <button className="text-xs text-mute hover:text-down" onClick={() => { setTyped(""); setConfirmDel(true); }}>Delete account…</button>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-mute">{state === "saved" ? "Saved" : ""}</span>
-          <button className="btn-primary" onClick={save} disabled={state === "saving"}>Save account</button>
+          <span className={`text-xs ${dirty ? "text-accent" : "text-mute"}`}>{dirty ? "Unsaved changes" : state === "saved" ? "Saved" : ""}</span>
+          {dirty && <button className="btn-ghost" onClick={() => { setA(account); setLadder(account.risk_ladder ?? []); }}>Discard</button>}
+          <button className="btn-primary" onClick={save} disabled={state === "saving" || !dirty}>Save changes</button>
         </div>
       </div>
 
@@ -183,11 +224,33 @@ function AccountEditor({ account }: { account: Account }) {
         </Field>
         <div className="mt-4 flex justify-end gap-2">
           <button className="btn-ghost" onClick={() => setConfirmDel(false)}>Cancel</button>
-          <button className="btn bg-down text-white disabled:opacity-40" disabled={typed.trim() !== account.name.trim() || deleting} onClick={deleteAccount}>
+          <button className="btn-danger" disabled={typed.trim() !== account.name.trim() || deleting} onClick={deleteAccount}>
             {deleting ? "Deleting…" : "Delete permanently"}
           </button>
         </div>
       </Modal>
+
+      {coachDb && (
+        <div className="mt-6 border-t border-line pt-4">
+          <div className="label mb-1">Equity sync</div>
+          <p className="mb-2 text-xs text-mute">Equity = starting balance + closed P&L − payouts + adjustments = <b className="num text-ink">{fmtUsd(s.equity)}</b>. If your broker shows something else (swap, commissions, a deposit), enter the real balance and the difference is logged as an adjustment.</p>
+          <div className="flex flex-wrap gap-2">
+            <input className="input num w-40" inputMode="decimal" placeholder="Broker balance $" value={sync.balance} onChange={(e) => setSync({ ...sync, balance: e.target.value })} />
+            <input className="input w-48 flex-1" placeholder="Note (optional)" value={sync.note} onChange={(e) => setSync({ ...sync, note: e.target.value })} maxLength={500} />
+            <button className="btn-ghost" onClick={syncEquity}>Sync</button>
+          </div>
+          {myAdj.length > 0 && (
+            <ul className="mt-3 divide-y divide-line text-sm">
+              {myAdj.map((x) => (
+                <li key={x.id} className="flex items-center justify-between py-1.5">
+                  <span className="num">{x.at.slice(0, 10)} · <span className={x.amount >= 0 ? "text-up" : "text-down"}>{fmtUsd(x.amount, true)}</span> {x.note && <span className="text-mute">· {x.note}</span>}</span>
+                  <button className="text-xs text-mute hover:text-down" onClick={async () => { if (!confirm("Delete this adjustment?")) return; await supabase.from("balance_adjustments").delete().eq("id", x.id); refresh(); }}>Delete</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="mt-6 border-t border-line pt-4">
         <div className="label mb-2">Payouts / withdrawals</div>
@@ -209,6 +272,7 @@ function AccountEditor({ account }: { account: Account }) {
         )}
       </div>
     </Card>
+    </div>
   );
 }
 
@@ -269,7 +333,7 @@ export default function Accounts() {
   }
   return (
     <>
-      <PageHead title="Accounts & rules" sub="Firm limits, your personal guardrails and risk ladder per account." action={<button className="btn-ghost" onClick={addAccount}>+ Account</button>} />
+      <PageHead title="Accounts & rules" sub="Every parameter is editable any time — balance, risk, limits, ladder, sessions. Changes apply to guardrails immediately." action={<button className="btn-ghost" onClick={addAccount}>+ Account</button>} />
       <div className="space-y-4">
         {accounts.map((a) => <AccountEditor key={a.id} account={a} />)}
         <Setups />

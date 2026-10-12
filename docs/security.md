@@ -11,11 +11,15 @@ Tradeplay is a **single-user** app. Defence is layered so that any one control f
 | 5 | Authorisation | `anon` role has **no** table privileges (revoked), on top of RLS | schema §2 |
 | 6 | Files | Private `screenshots` bucket, per-user folder policy, PNG/JPG/WebP only, ≤5 MB, 10-minute signed URLs | schema §3, `TradeModal.tsx` |
 | 7 | Browser | Per-request **nonce CSP** with `strict-dynamic` (no inline/eval scripts in production), `frame-ancestors 'none'`, `object-src 'none'`, `connect-src` limited to self + your Supabase | `proxy.ts` |
-| 8 | Browser | HSTS (2 years, preload), `X-Frame-Options: DENY`, `nosniff`, strict `Referrer-Policy`, `Permissions-Policy` (camera/mic/geo/payment off), COOP, `noindex` | `next.config.mjs` |
+| 8 | Browser | HSTS (2 years, preload), `X-Frame-Options: DENY`, `nosniff`, strict `Referrer-Policy`, `Permissions-Policy` (camera/geo/payment off; mic self-only), COOP, `noindex` | `next.config.mjs` |
 | 9 | Data integrity | DB constraints: text length caps, `https://`-only chart links, positive prices, sane % and fee ranges, max 12 news times | schema §1 |
 | 10 | Runtime | Container runs as non-root `app`, read-only root FS, all Linux capabilities dropped, `no-new-privileges`, memory/CPU limits | `Dockerfile`, `docker-compose.yml` |
 | 11 | Supply chain | `npm ci` from lockfile, `npm audit` (high+) in CI, image SBOM + provenance attestations on GHCR | `.github/workflows` |
 | 12 | Privacy | Service worker caches only static assets — never API responses or journal data | `public/sw.js` |
+| 13 | Server routes | `/api/ai`, `/api/ai/transcribe`, `/api/market` require a valid Supabase access token, verified server-side; queries run under that JWT so RLS still applies; per-user rate limits; input length caps | `lib/ai/auth.ts` |
+| 14 | AI | LLM keys are server-only env vars (never `NEXT_PUBLIC_`); third-party headlines are fenced as untrusted data in prompts; the coach can only *propose* changes — you apply them with your own session | `lib/ai/*`, `lib/coach.ts` |
+| 15 | Browser | Microphone allowed for this origin only (`Permissions-Policy: microphone=(self)`); audio is sent once for transcription only when the browser lacks speech recognition, never stored | `next.config.mjs`, `components/Voice.tsx` |
+| 16 | Rendering | Coach replies render through a tiny markdown renderer that builds React elements (no `dangerouslySetInnerHTML`); only `https://` links | `components/coach-ui.tsx` |
 
 ## Keys and secrets
 
@@ -25,6 +29,7 @@ Tradeplay is a **single-user** app. Defence is layered so that any one control f
 | Supabase **publishable** key (`sb_publishable_…`) | Public by design — only grants what RLS allows | Same |
 | Supabase **service-role / secret** key | **Secret — never used by this app.** Never put it in env vars, the repo or the browser | Supabase dashboard only |
 | `ALLOWED_IPS` | Low | Vercel env / server `.env` |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `COMPAT_API_KEY` | **Secret** | Vercel env (Production/Preview) or server `.env` — server-only |
 | `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` | Secret | GitHub → Settings → Secrets (only if you self-host) |
 
 ## The IP allowlist — what it does and doesn't do

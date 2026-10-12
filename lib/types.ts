@@ -73,8 +73,43 @@ export type Trade = {
   planned_risk_usd: number | null;
   override_reason: string | null;
   guardrail_breaches: string[];
+  /** Feelings logged across the trade (added in migration 0005; may be absent on older rows). */
+  emotion_log?: EmotionEntry[];
+  /** Pre-trade mental state ratings 1–5. */
+  mental?: MentalState;
   created_at: string;
 };
+
+export type TradeStage = "pre" | "during" | "post";
+export type EmotionEntry = { at: string; stage: TradeStage; emotions: string[]; intensity?: number; note?: string };
+export type MentalState = { focus?: number; confidence?: number; stress?: number; energy?: number; patience?: number };
+export const MENTAL_KEYS: { key: keyof MentalState; label: string; good: "high" | "low" }[] = [
+  { key: "focus", label: "Focus", good: "high" },
+  { key: "confidence", label: "Confidence", good: "high" },
+  { key: "patience", label: "Patience", good: "high" },
+  { key: "energy", label: "Energy", good: "high" },
+  { key: "stress", label: "Stress", good: "low" },
+];
+/** Wider emotion vocabulary for the tracker; the original EMOTIONS stay valid. */
+export const FEELINGS = {
+  positive: ["Calm", "Confident", "Focused", "Patient", "Detached"],
+  negative: ["Anxious", "Hesitant", "FOMO", "Greedy", "Fearful", "Frustrated", "Revenge", "Overconfident", "Impatient", "Bored", "Tired"],
+} as const;
+export const ALL_FEELINGS: string[] = [...FEELINGS.positive, ...FEELINGS.negative];
+
+export type Checkin = {
+  id: string;
+  checkin_date: string;
+  mood: number | null;
+  energy: number | null;
+  focus: number | null;
+  stress: number | null;
+  sleep_hours: number | null;
+  emotions: string[];
+  note: string | null;
+};
+
+export type Brief = { id: string; brief_date: string; kind: "outlook" | "brief" | "market" | "review"; content: Record<string, unknown>; model: string | null; created_at: string };
 
 export type Payout = { id: string; account_id: string; amount: number; paid_at: string; note: string | null };
 
@@ -99,7 +134,53 @@ export type DayPlan = {
   news_times: string[];
   checklist: Record<string, boolean>;
   notes: string | null;
+  /** Sessions chosen for this day; empty = use the account default. */
+  sessions?: SessionName[];
+  /** IST "HH:MM-HH:MM" used when sessions include "Custom". */
+  custom_window?: string | null;
 };
+
+export type SessionName = "Asia" | "London" | "New York" | "Any" | "Custom";
+export const SESSION_CHOICES: SessionName[] = ["Asia", "London", "New York", "Custom", "Any"];
+
+export type Adjustment = { id: string; account_id: string; amount: number; at: string; note: string | null };
+
+export type Lesson = {
+  id: string;
+  trade_id: string | null;
+  account_id: string | null;
+  instrument: string | null;
+  kind: "loss" | "win" | "rule";
+  title: string;
+  cause: string | null;
+  rule: string | null;
+  tags: string[];
+  source: "manual" | "auto" | "ai";
+  active: boolean;
+  created_at: string;
+};
+
+export type Reminder = {
+  id: string;
+  account_id: string | null;
+  text: string;
+  due_at: string;
+  done: boolean;
+  source: "manual" | "ai";
+  created_at: string;
+};
+
+export type Memory = { id: string; kind: "fact" | "preference" | "goal" | "rule"; content: string; pinned: boolean; created_at: string };
+export type Thread = { id: string; title: string; created_at: string; updated_at: string };
+export type Message = { id: string; thread_id: string; role: "user" | "assistant"; content: string; meta: Record<string, unknown>; created_at: string };
+
+/** Things the coach may propose; the user applies them with one tap. */
+export type CoachAction =
+  | { type: "save_plan"; account: string; fields: Partial<Pick<DayPlan, "bias" | "htf_range" | "magnet" | "invalidation" | "pois" | "notes" | "news_times" | "sessions" | "custom_window">> }
+  | { type: "add_reminder"; text: string; due_at: string; account?: string }
+  | { type: "remember"; content: string; kind?: Memory["kind"] }
+  | { type: "add_lesson"; title: string; rule: string; cause?: string; account?: string }
+  | { type: "draft_trade"; account?: string; fields: Record<string, unknown> };
 
 export const PREMARKET = [
   { key: "calendar", label: "Checked the economic calendar and added news times" },

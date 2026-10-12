@@ -42,3 +42,21 @@ Open the site in Safari/Chrome → *Share → Add to Home Screen* (iOS) or *Inst
 | 403 "Access denied for <ip>" | IP allowlist — see above |
 | Day limits look off by a few hours | Set the account's *Daily reset (UTC)* to the firm/broker's rollover |
 | Container unhealthy | `docker compose logs app`; check `/api/health`; ensure build args were set |
+
+## Daily flow with the coach (since v2)
+1. **Today** — read the quote, do the 30-second **check-in**, scan the **Actions** list, read the **outlook** for gold and BTC.
+2. **Economic calendar** widget → *Block today's times in my plans* (and *Remind me before each*).
+3. **Plan** → *Dictate plan* (or type), pick the **sessions** you'll trade today per account; the window guardrail follows it.
+4. **New trade** → rate your mental state, tick the gate, *Check this trade* → log only on GO.
+5. While open: Trade → **Emotion tracker** (log "during") and *What now?*.
+6. After close: result, **emotion after**, *Why did this win/lose?* → *Remember this lesson*.
+7. Weekly: **Insights → Patterns/Emotions**, then **Review → Draft with coach**.
+
+### Equity doesn't match the broker
+Accounts → *Equity sync* → enter the broker balance; the difference is stored as a dated adjustment (delete it to undo).
+
+### Delete vs close an account
+*Delete account…* removes the account with all its trades, payouts, plans and screenshots (type the name to confirm). If you want to keep the history, choose *Mark it closed* — it leaves Today but stays in Insights.
+
+### Coach says "No AI provider is configured"
+Add one key (see [ai-coach.md](ai-coach.md)) in Vercel → Settings → Environment Variables and redeploy.

@@ -1,4 +1,4 @@
-import type { Account, DayPlan, Payout, Tier, Trade } from "./types";
+import type { Account, Adjustment, DayPlan, Payout, SessionName, Tier, Trade } from "./types";
 
 /* ---------- basic trade math ---------- */
 
@@ -49,8 +49,11 @@ export function dayStart(account: Pick<Account, "day_reset_utc">, now = new Date
 
 const closedTime = (t: Trade) => new Date(t.closed_at ?? t.opened_at).getTime();
 
-export function balanceAt(account: Account, trades: Trade[], payouts: Payout[], at: number = Infinity): number {
+export function balanceAt(account: Account, trades: Trade[], payouts: Payout[], at: number = Infinity, adjustments: Adjustment[] = []): number {
   let bal = Number(account.starting_balance);
+  for (const a of adjustments) {
+    if (a.account_id === account.id && new Date(a.at).getTime() < at) bal += Number(a.amount);
+  }
   for (const t of trades) {
     if (t.account_id === account.id && t.status === "closed" && t.net_pnl != null && closedTime(t) < at) bal += Number(t.net_pnl);
   }
@@ -120,13 +123,16 @@ export type AccountState = {
   nextReset: Date;
 };
 
-export function accountState(account: Account, trades: Trade[], payouts: Payout[], now = new Date()): AccountState {
+export type StateOpts = { plan?: Pick<DayPlan, "sessions" | "custom_window"> | null; adjustments?: Adjustment[] };
+
+export function accountState(account: Account, trades: Trade[], payouts: Payout[], now = new Date(), opts: StateOpts = {}): AccountState {
+  const adj = opts.adjustments ?? [];
   const start = dayStart(account, now);
   const startMs = start.getTime();
   const mine = trades.filter((t) => t.account_id === account.id && t.status !== "cancelled");
 
-  const equity = balanceAt(account, trades, payouts);
-  const sod = balanceAt(account, trades, payouts, startMs);
+  const equity = balanceAt(account, trades, payouts, Infinity, adj);
+  const sod = balanceAt(account, trades, payouts, startMs, adj);
   const today = mine.filter((t) => new Date(t.opened_at).getTime() >= startMs);
   const todayClosed = mine.filter((t) => t.status === "closed" && t.net_pnl != null && closedTime(t) >= startMs);
   const todayNet = todayClosed.reduce((s, t) => s + Number(t.net_pnl), 0);
@@ -152,7 +158,7 @@ export function accountState(account: Account, trades: Trade[], payouts: Payout[
   if (equity <= personalStop) reasons.push(`Personal daily stop hit (−${account.personal_daily_loss_pct}%)`);
   if (account.max_daily_profit_pct && todayNet >= sod * (account.max_daily_profit_pct / 100))
     reasons.push(`Daily profit cap reached (+${account.max_daily_profit_pct}%) — lock the day`);
-  if (!windowOpen(account, now)) reasons.push(`Outside your ${account.session_window} window`);
+  if (!windowOpen(account, now, opts.plan)) reasons.push(`Outside your ${windowLabel(account, opts.plan)} window`);
   if (equity <= dailyFloor) reasons.push("Firm daily loss limit reached");
   if (equity <= floor) reasons.push("Max drawdown breached");
 
@@ -222,18 +228,50 @@ export function sessionAt(d = new Date()): SessionInfo {
   return { name: "Off-session", inWindow: false };
 }
 
-export function windowOpen(account: Pick<Account, "session_window">, d = new Date()): boolean {
-  if (!account.session_window || account.session_window === "Any") return true;
-  const s = sessionAt(d);
-  return s.inWindow && s.name === account.session_window;
+type PlanSessions = Pick<DayPlan, "sessions" | "custom_window"> | null | undefined;
+
+/** Sessions in force: today's plan choice if set, else the account default. */
+export function activeSessions(account: Pick<Account, "session_window">, plan?: PlanSessions): SessionName[] {
+  const chosen = (plan?.sessions ?? []).filter(Boolean) as SessionName[];
+  if (chosen.length) return chosen;
+  return [account.session_window ?? "Any"];
 }
 
-/** Next opening of the account's window, in ms from `d` (0 if open now). */
-export function msToWindow(account: Pick<Account, "session_window">, d = new Date()): number {
-  if (windowOpen(account, d)) return 0;
+export function windowLabel(account: Pick<Account, "session_window">, plan?: PlanSessions): string {
+  return activeSessions(account, plan)
+    .map((s) => (s === "Custom" && plan?.custom_window ? `${plan.custom_window} IST` : s))
+    .join(" / ");
+}
+
+/** Minutes since IST midnight. */
+function istMinutes(d: Date): number {
+  const ist = new Date(d.getTime() + 5.5 * 3600 * 1000);
+  return ist.getUTCHours() * 60 + ist.getUTCMinutes();
+}
+
+/** "HH:MM-HH:MM" (IST) contains d; supports windows that cross midnight. */
+export function inCustomWindow(win: string | null | undefined, d = new Date()): boolean {
+  const m = /^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/.exec(win ?? "");
+  if (!m) return false;
+  const from = Number(m[1]) * 60 + Number(m[2]);
+  const to = Number(m[3]) * 60 + Number(m[4]);
+  const now = istMinutes(d);
+  return from <= to ? now >= from && now < to : now >= from || now < to;
+}
+
+export function windowOpen(account: Pick<Account, "session_window">, d = new Date(), plan?: PlanSessions): boolean {
+  const list = activeSessions(account, plan);
+  if (list.includes("Any")) return true;
+  const s = sessionAt(d);
+  return list.some((name) => (name === "Custom" ? inCustomWindow(plan?.custom_window, d) : s.inWindow && s.name === name));
+}
+
+/** Next opening of the window in force, in ms from `d` (0 if open now). */
+export function msToWindow(account: Pick<Account, "session_window">, d = new Date(), plan?: PlanSessions): number {
+  if (windowOpen(account, d, plan)) return 0;
   for (let m = 1; m <= 24 * 60; m++) {
     const t = new Date(d.getTime() + m * 60000);
-    if (windowOpen(account, t)) return m * 60000;
+    if (windowOpen(account, t, plan)) return m * 60000;
   }
   return 0;
 }

@@ -43,7 +43,7 @@ export function Meter({ value, tone = "mute", label }: { value: number; tone?: "
   const pct = Math.max(0, Math.min(1, value)) * 100;
   const bg = { up: "bg-up", down: "bg-down", warn: "bg-warn", mute: "bg-mute", accent: "bg-accent" }[tone];
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-line" role="meter" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-raised" role="meter" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
       <div className={`h-full rounded-full ${bg} transition-all`} style={{ width: `${pct}%` }} />
     </div>
   );
@@ -131,8 +131,8 @@ export function Modal({ open, onClose, title, children }: { open: boolean; onClo
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={onClose} role="dialog" aria-modal aria-label={title}>
-      <div className="card max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-b-none p-5 sm:rounded-xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-4" onClick={onClose} role="dialog" aria-modal aria-label={title}>
+      <div className="card max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-b-none p-5 shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold">{title}</h2>
           <button onClick={onClose} className="text-mute hover:text-ink" aria-label="Close">✕</button>
@@ -145,7 +145,7 @@ export function Modal({ open, onClose, title, children }: { open: boolean; onClo
 
 export function Empty({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-line p-8 text-center">
+    <div className="rounded-2xl border border-dashed border-line p-8 text-center">
       <div className="text-sm font-medium">{title}</div>
       {children && <div className="mt-1 text-sm text-mute">{children}</div>}
     </div>
@@ -156,7 +156,7 @@ export function PageHead({ title, sub, action }: { title: string; sub?: React.Re
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="text-[26px] font-semibold tracking-tight sm:text-[28px]">{title}</h1>
         {sub && <p className="mt-1 text-sm text-mute">{sub}</p>}
       </div>
       {action}

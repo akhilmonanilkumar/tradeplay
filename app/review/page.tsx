@@ -5,6 +5,8 @@ import { useData } from "@/components/Shell";
 import { Badge, Card, Field, PageHead, Stat } from "@/components/ui";
 import { fmtPct, fmtR, fmtUsd, groupStats, inWeekIST, stats, weekStartIST } from "@/lib/calc";
 import { supabase } from "@/lib/supabase";
+import { askCoach, useCoachStatus } from "@/lib/coach";
+import VoiceButton from "@/components/Voice";
 
 function shiftWeek(ws: string, n: number) {
   const d = new Date(`${ws}T00:00:00Z`);
@@ -19,6 +21,20 @@ export default function Review() {
   const [form, setForm] = useState({ went_well: "", to_fix: "", rule_change: "", rating: 3 });
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
   const [err, setErr] = useState<string | null>(null);
+  const coach = useCoachStatus();
+  const [drafting, setDrafting] = useState(false);
+  async function draft() {
+    setDrafting(true);
+    const r = await askCoach("review", { payload: { week } });
+    setDrafting(false);
+    if (r.error) return setErr(r.error);
+    setForm((f) => ({
+      ...f,
+      went_well: String(r.went_well ?? f.went_well),
+      to_fix: String(r.to_fix ?? f.to_fix),
+      rule_change: String(r.rule_change ?? f.rule_change),
+    }));
+  }
 
   useEffect(() => {
     setForm({
@@ -131,6 +147,10 @@ export default function Review() {
 
         <Card title="Reflection" className="lg:col-span-2">
           <div className="space-y-3">
+            <div className="flex flex-wrap justify-end gap-2">
+              <VoiceButton size="sm" label="Dictate" onText={(t) => setForm((f) => ({ ...f, went_well: [f.went_well, t].filter(Boolean).join(" ") }))} />
+              {coach?.enabled && <button type="button" className="btn-ghost h-8 min-h-0 text-xs" onClick={draft} disabled={drafting}>{drafting ? "Drafting…" : "Draft with coach"}</button>}
+            </div>
             <Field label="What went well"><textarea className="input min-h-20" maxLength={4000} value={form.went_well} onChange={(e) => setForm({ ...form, went_well: e.target.value })} /></Field>
             <Field label="What to fix"><textarea className="input min-h-20" maxLength={4000} value={form.to_fix} onChange={(e) => setForm({ ...form, to_fix: e.target.value })} /></Field>
             <Field label="Rule change (if any — max one)"><textarea className="input min-h-16" maxLength={4000} value={form.rule_change} onChange={(e) => setForm({ ...form, rule_change: e.target.value })} /></Field>

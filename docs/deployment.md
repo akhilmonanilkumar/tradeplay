@@ -27,6 +27,9 @@ GitHub Actions: Release
 | `NEXT_PUBLIC_SUPABASE_URL` | ✓ | build time | `https://drdpzpaeuvelbsdxhndw.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✓ | build time | Supabase publishable key (`sb_publishable_…`) |
 | `ALLOWED_IPS` | – | runtime | Comma list: `1.2.3.4, 10.0.0.0/24, 2401:db8::1`. Unset = off |
+| `APP_URL` | – | runtime | Public URL for link previews (Vercel sets its own) |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` / `COMPAT_BASE_URL`+`COMPAT_API_KEY` | – | runtime, **secret** | Any one enables the AI coach — [ai-coach.md](ai-coach.md) |
+| `AI_MODELS`, `OPENAI_BASE_URL`, `AI_STT_MODEL`, `NEWS_FEEDS` | – | runtime | Model list (first = default), endpoints, speech model, RSS overrides |
 
 `NEXT_PUBLIC_*` are baked into the browser bundle at **build** time (Docker build args / Vercel build env). Changing them requires a rebuild.
 
@@ -111,4 +114,7 @@ Then every green push to `main` → image built → rolled out with zero downtim
 Concurrency: CI cancels superseded runs; Release never cancels a rollout in progress.
 
 ## Supabase changes
+
+Pending for this release: **`supabase/migrations/0005_sessions_coach.sql`** (sessions per plan, equity adjustments, lessons, reminders, emotions, check-ins, coach tables). It is additive; until it runs the app shows a notice on the new sections and everything else keeps working.
+
 Schema changes are applied as migrations (via the Supabase dashboard/MCP) and mirrored in `supabase/schema.sql`. Apply the database change **before** deploying code that depends on it; additive changes (new nullable columns/tables) are safe to ship first.

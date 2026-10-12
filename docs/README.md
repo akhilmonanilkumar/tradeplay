@@ -9,3 +9,5 @@
 | [accounts-and-risk.md](accounts-and-risk.md) | FundedHive & Breakout rules, risk ladders, sizing formulas, how guardrails decide |
 | [operations.md](operations.md) | Daily workflow, backups, common tasks, troubleshooting |
 | [trading-playbook.md](trading-playbook.md) | The A+ trading playbook the app enforces |
+| [AI coach](ai-coach.md) | Providers, keys, context, actions, voice, costs |
+| [Design](design.md) | Brand, tokens, themes, components |

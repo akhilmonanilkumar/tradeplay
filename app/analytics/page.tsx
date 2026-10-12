@@ -1,14 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useData } from "@/components/Shell";
 import { Badge, Card, Empty, PageHead, Segmented, Stat } from "@/components/ui";
 import { HBars, Heatmap, Histogram, LineChart, PnlCalendar } from "@/components/Charts";
 import TradeModal from "@/components/TradeModal";
+import { CalendarTab, EmotionsTab, PatternsTab, PerformanceTab, ToolsTab } from "@/components/InsightsTabs";
 import { equityCurveR, fmtIST, fmtPct, fmtR, fmtUsd, groupStats, stats, type Stats } from "@/lib/calc";
 import { GATE_CHECKS, type Trade } from "@/lib/types";
 
 type Range = "7" | "30" | "90" | "all";
+type Tab = "overview" | "calendar" | "performance" | "patterns" | "emotions" | "tools";
+const TABS: { value: Tab; label: string }[] = [
+  { value: "overview", label: "Overview" }, { value: "calendar", label: "Calendar" }, { value: "performance", label: "Performance" },
+  { value: "patterns", label: "Patterns" }, { value: "emotions", label: "Emotions" }, { value: "tools", label: "Tools" },
+];
 type Dim = "setup" | "model" | "session" | "weekday" | "poi" | "direction" | "instrument" | "hour" | "gate";
 type Drill = { dim: Dim; key: string };
 
@@ -29,6 +35,18 @@ export default function Analytics() {
   const [month, setMonth] = useState(() => new Date());
   const [edit, setEdit] = useState<Trade | null>(null);
   const [day, setDay] = useState<string | null>(null);
+  const [dayAcct, setDayAcct] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("overview");
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab") as Tab | null;
+    if (t && TABS.some((x) => x.value === t)) setTab(t);
+  }, []);
+  function pickTab(t: Tab) {
+    setTab(t);
+    try {
+      history.replaceState(null, "", t === "overview" ? "/analytics" : `/analytics?tab=${t}`);
+    } catch {}
+  }
 
   const setupName = (t: Trade) => setups.find((s) => s.id === t.setup_id)?.name ?? "—";
   const keyOf: Record<Dim, (t: Trade) => string> = {
@@ -100,7 +118,11 @@ export default function Analytics() {
 
   const insights = useMemo(() => buildInsights(rows, keyOf), [rows]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const dayTrades = day ? rows.filter((t) => istDate(t.closed_at ?? t.opened_at).toISOString().slice(0, 10) === day) : [];
+  const dayTrades = day
+    ? (tab === "calendar" ? trades.filter((t) => t.status === "closed" && (!dayAcct || t.account_id === dayAcct)) : rows).filter((t) => istDate(t.closed_at ?? t.opened_at).toISOString().slice(0, 10) === day)
+    : [];
+  const pickTrade = (id: string) => setEdit(trades.find((t) => t.id === id) ?? null);
+  const comboKeys = useMemo(() => ({ session: keyOf.session, setup: keyOf.setup, model: keyOf.model, poi: keyOf.poi, weekday: keyOf.weekday, direction: keyOf.direction }), [setups]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -114,12 +136,40 @@ export default function Analytics() {
               <option value="all">All accounts</option>
               {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
-            <button className={`btn ${aplusOnly ? "bg-up/15 text-up" : "btn-ghost"}`} onClick={() => setAplusOnly((v) => !v)}>A+ only</button>
+            <button className={aplusOnly ? "btn bg-up/15 text-up" : "btn-ghost"} onClick={() => setAplusOnly((v) => !v)}>A+ only</button>
           </div>
         }
       />
 
-      {drills.length > 0 && (
+      <div className="-mx-1 mb-5 overflow-x-auto px-1">
+        <div className="inline-flex gap-1 rounded-xl border border-line bg-panel p-1">
+          {TABS.map((t) => (
+            <button key={t.value} onClick={() => pickTab(t.value)} className={`rounded-lg px-3 py-1.5 text-sm transition ${tab === t.value ? "bg-raised font-medium text-ink" : "text-mute hover:text-ink"}`}>{t.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {tab === "calendar" && <CalendarTab onDay={(d, a) => { setDay(d); setDayAcct(a); }} />}
+      {tab === "performance" && (base.length ? <PerformanceTab rows={rows} onPick={pickTrade} /> : <Empty title="No closed trades in this view" />)}
+      {tab === "patterns" && (base.length ? <PatternsTab rows={rows} keyOf={comboKeys} /> : <Empty title="No closed trades in this view" />)}
+      {tab === "emotions" && <EmotionsTab rows={rows} />}
+      {tab === "tools" && <ToolsTab rows={rows} />}
+      {tab === "calendar" && day && (
+        <Card className="mt-4" title={`Trades closed ${day}`} action={<button className="text-xs text-mute" onClick={() => setDay(null)}>Close</button>}>
+          <ul className="divide-y divide-line text-sm">
+            {dayTrades.map((t) => (
+              <li key={t.id}>
+                <button className="flex w-full items-center justify-between py-2 text-left hover:text-accent" onClick={() => setEdit(t)}>
+                  <span>{fmtIST(t.opened_at, false)} · {t.instrument} · {t.direction} · {setupName(t)}</span>
+                  <span className={`num ${Number(t.r_multiple) >= 0 ? "text-up" : "text-down"}`}>{fmtR(t.r_multiple)} · {fmtUsd(t.net_pnl, true)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {tab === "overview" && drills.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
           {drills.map((d) => (
             <button key={d.dim} className="chip border-accent/40 text-accent" onClick={() => toggle(d.dim, d.key)}>
@@ -130,7 +180,7 @@ export default function Analytics() {
         </div>
       )}
 
-      {base.length === 0 ? (
+      {tab !== "overview" ? null : base.length === 0 ? (
         <Empty title="No closed trades in this view">Close a few trades and your edge will show up here.</Empty>
       ) : (
         <div className="space-y-4">
@@ -207,7 +257,7 @@ export default function Analytics() {
             </Card>
             <Card title="Cost of mistakes">
               {mistakes.length === 0 ? (
-                <p className="text-sm text-mute">No mistakes tagged in this view. 👌</p>
+                <p className="text-sm text-mute">No mistakes tagged in this view.</p>
               ) : (
                 <HBars rows={mistakes.map((m) => ({ key: m.key, value: m.s.totalR, sub: `${m.s.n} trades` }))} />
               )}

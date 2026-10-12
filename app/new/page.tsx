@@ -4,12 +4,18 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useData } from "@/components/Shell";
-import { Badge, Card, Check, Field, PageHead, Segmented, numOrNull } from "@/components/ui";
+import { Badge, Card, Check, Chips, Field, PageHead, Segmented, numOrNull } from "@/components/ui";
+import VoiceButton from "@/components/Voice";
+import { ActionChips, Markdown, Sparkle } from "@/components/coach-ui";
 import { supabase } from "@/lib/supabase";
 import {
-  accountState, feeShare, fmtUsd, levelsValid, newsBlock, positionSize, roundSize, rr, sessionAt, todayIST,
+  accountState, feeShare, fmtUsd, levelsValid, newsBlock, positionSize, roundSize, rr, sessionAt, todayIST, windowOpen, windowLabel,
 } from "@/lib/calc";
-import { ENTRY_MODELS, GATE_CHECKS, POI_TYPES, SESSIONS, type GateKey } from "@/lib/types";
+import { matchLessons, parseDictation } from "@/lib/analysis";
+import { askCoach, resolveAccount, useCoachStatus, type CoachResult } from "@/lib/coach";
+import { ALL_FEELINGS, ENTRY_MODELS, FEELINGS, GATE_CHECKS, MENTAL_KEYS, POI_TYPES, SESSIONS, type CoachAction, type GateKey, type MentalState } from "@/lib/types";
+
+type Precheck = CoachResult & { verdict?: "GO" | "WAIT" | "NO"; summary?: string; checks?: { ok: boolean | null; text: string }[]; manage?: string[]; lessons?: string[]; actions?: CoachAction[] };
 
 const blankGate = Object.fromEntries(GATE_CHECKS.map((g) => [g.key, false])) as Record<GateKey, boolean>;
 
@@ -20,7 +26,8 @@ function localInput(d: Date) {
 
 export default function NewTrade() {
   const router = useRouter();
-  const { accounts, setups, trades, payouts, plans, refresh } = useData();
+  const { accounts, setups, trades, payouts, plans, refresh, adjustments, lessons, coachDb } = useData();
+  const coach = useCoachStatus();
   const active = accounts.filter((a) => a.status === "active");
   const [accountId, setAccountId] = useState(active[0]?.id ?? "");
   const acct = accounts.find((a) => a.id === accountId);
@@ -43,18 +50,67 @@ export default function NewTrade() {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [mental, setMental] = useState<MentalState>({});
+  const [feelings, setFeelings] = useState<string[]>([]);
+  const [heard, setHeard] = useState("");
+  const [autoVoice, setAutoVoice] = useState(false);
+  const [check, setCheck] = useState<Precheck | null>(null);
+  const [checking, setChecking] = useState(false);
 
   const now = new Date();
-  const state = acct ? accountState(acct, trades, payouts, now) : null;
-  const plan = plans.find((p) => p.account_id === accountId && p.plan_date === todayIST(now));
+  const plan = plans.find((p) => p.account_id === accountId && p.plan_date === todayIST(now)) ?? null;
+  const state = acct ? accountState(acct, trades, payouts, now, { plan, adjustments }) : null;
   const news = newsBlock(plan, now);
   const backfill = Math.abs(new Date(openedAt).getTime() - now.getTime()) > 30 * 60000;
 
   useEffect(() => {
     const s = sessionAt();
     setSession(s.name);
-    setGate((g) => ({ ...g, in_session: !!acct && (acct.session_window === "Any" || (s.inWindow && s.name === acct.session_window)) }));
-  }, [accountId, acct]);
+    setGate((g) => ({ ...g, in_session: !!acct && windowOpen(acct, new Date(), plan) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, acct, plan?.sessions?.join(), plan?.custom_window]);
+
+  // Prefill from ?draft= (coach) and start dictation from ?voice=1
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("voice") === "1") setAutoVoice(true);
+    const raw = q.get("draft");
+    if (raw) {
+      try {
+        applyFields(JSON.parse(raw));
+      } catch {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function applyFields(f: Record<string, unknown>) {
+    const acc = typeof f.account_id === "string" ? accounts.find((a) => a.id === f.account_id) : typeof f.account === "string" ? resolveAccount(accounts, f.account) : null;
+    if (acc) setAccountId(acc.id);
+    if (f.direction === "long" || f.direction === "short") setDirection(f.direction);
+    const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? String(v) : typeof v === "string" && v.trim() && Number.isFinite(Number(v)) ? v : null);
+    if (num(f.entry)) setEntry(num(f.entry)!);
+    if (num(f.sl)) setSl(num(f.sl)!);
+    if (num(f.tp)) setTp(num(f.tp)!);
+    if (typeof f.poi_type === "string" && POI_TYPES.includes(f.poi_type)) setPoi(f.poi_type);
+    if (typeof f.entry_model === "string" && ENTRY_MODELS.includes(f.entry_model)) setModel(f.entry_model);
+    if (typeof f.session === "string" && SESSIONS.includes(f.session)) setSession(f.session);
+    if (typeof f.invalidation === "string") setInvalidation(f.invalidation);
+    if (Array.isArray(f.emotions)) setFeelings((x) => [...new Set([...x, ...(f.emotions as string[]).filter((e) => ALL_FEELINGS.includes(e))])]);
+    if (f.mental && typeof f.mental === "object") setMental((m) => ({ ...m, ...(f.mental as MentalState) }));
+    if (f.gate && typeof f.gate === "object") {
+      const g = f.gate as Record<string, unknown>;
+      setGate((x) => ({ ...x, ...Object.fromEntries(GATE_CHECKS.filter((c) => typeof g[c.key] === "boolean").map((c) => [c.key, g[c.key] as boolean])) }));
+    }
+  }
+
+  async function fromVoice(text: string) {
+    setHeard(text);
+    applyFields(parseDictation(text, accounts) as Record<string, unknown>);
+    if (coach?.enabled) {
+      const r = await askCoach("parse", { payload: { text, target: "trade" } });
+      if (r.fields && typeof r.fields === "object") applyFields(r.fields as Record<string, unknown>);
+    }
+  }
 
   const setup = setups.find((s) => s.id === setupId);
   useEffect(() => {
@@ -85,6 +141,32 @@ export default function NewTrade() {
     return out;
   }, [backfill, state, news, plan, direction, risk, planned, gateOk, gateScore, rrOk, valid, ratio, minRr]);
 
+  const mentalWarn = useMemo(() => {
+    const w: string[] = [];
+    if ((mental.stress ?? 0) >= 4) w.push("High stress");
+    if (mental.focus != null && mental.focus <= 2) w.push("Low focus");
+    if (mental.patience != null && mental.patience <= 2) w.push("Impatient");
+    const neg = feelings.filter((f) => (FEELINGS.negative as readonly string[]).includes(f));
+    if (neg.length) w.push(neg.join(", "));
+    return w;
+  }, [mental, feelings]);
+  const myLessons = matchLessons(lessons, { account_id: accountId, instrument: acct?.instrument }, 4);
+
+  async function runCheck() {
+    setChecking(true);
+    setCheck(null);
+    const r = (await askCoach("precheck", {
+      payload: {
+        account_id: accountId,
+        draft: { direction, session, setup: setup?.name, entry_model: model, poi_type: poi, entry: e, sl: s, tp: t, rr: ratio, risk, size, gate, invalidation, mental, feelings, breaches, backfill },
+        poi_type: poi,
+        entry_model: model,
+      },
+    })) as Precheck;
+    setCheck(r);
+    setChecking(false);
+  }
+
   const canSave = valid && risk > 0 && (breaches.length === 0 || (override && reason.trim().length >= 10));
 
   async function submit() {
@@ -113,6 +195,8 @@ export default function NewTrade() {
       override_reason: breaches.length ? reason.trim() : null,
       guardrail_breaches: breaches,
       mistakes: breaches.length ? ["Off-plan"] : [],
+      emotions: feelings.filter((f) => ["Calm", "Confident", "Hesitant", "FOMO", "Revenge", "Overconfident", "Tired"].includes(f)),
+      ...(coachDb ? { mental, emotion_log: feelings.length || Object.keys(mental).length ? [{ at: new Date().toISOString(), stage: "pre", emotions: feelings }] : [] } : {}),
       ...gate,
     });
     setBusy(false);
@@ -128,8 +212,19 @@ export default function NewTrade() {
       <PageHead
         title="New trade"
         sub={backfill ? "Back-filling a past trade — live guardrails are not enforced, the A+ gate still is." : "Every box ticked, R:R ≥ 1:3, inside your window — or no trade."}
-        action={<Segmented value={accountId} onChange={(v) => { setAccountId(v); setRiskInput(""); setSizeInput(""); }} options={active.map((a) => ({ value: a.id, label: `${a.instrument}` }))} />}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <VoiceButton label="Dictate trade" autoStart={autoVoice} onInterim={setHeard} onText={fromVoice} />
+            <Segmented value={accountId} onChange={(v) => { setAccountId(v); setRiskInput(""); setSizeInput(""); }} options={active.map((a) => ({ value: a.id, label: `${a.instrument}` }))} />
+          </div>
+        }
       />
+      {heard && (
+        <div className="coach mb-4 p-3 text-sm">
+          <span className="label mr-2 text-accent">Heard</span>{heard}
+          <p className="mt-1 text-xs text-mute">Try: “Long gold, entry 4,212.5, stop 4,209, target 4,223, flip zone, market shift, London, feeling calm”. Check every field before logging.</p>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-5">
         <div className="space-y-4 lg:col-span-3">
@@ -212,9 +307,60 @@ export default function NewTrade() {
               <Field label="Chart link"><input className="input" type="url" maxLength={500} value={chart} onChange={(ev) => setChart(ev.target.value)} placeholder="https://www.tradingview.com/x/…" /></Field>
             </div>
           </Card>
+
+          <Card title="Mental state · before entry" action={mentalWarn.length ? <Badge tone="warn">{mentalWarn.join(" · ")}</Badge> : Object.keys(mental).length ? <Badge tone="up">Ready</Badge> : <Badge>Rate yourself</Badge>}>
+            <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+              {MENTAL_KEYS.map((m) => (
+                <div key={m.key} className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-mute">{m.label}</span>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((n) => {
+                      const on = mental[m.key] === n;
+                      const good = m.good === "high" ? n >= 4 : n <= 2;
+                      const bad = m.good === "high" ? n <= 2 : n >= 4;
+                      return (
+                        <button key={n} type="button" aria-label={`${m.label} ${n}`} aria-pressed={on} onClick={() => setMental((x) => ({ ...x, [m.key]: n }))}
+                          className={`num h-7 w-7 rounded-md border text-xs ${on ? (good ? "border-up bg-up/15 text-up" : bad ? "border-down bg-down/15 text-down" : "border-accent bg-accent/15") : "border-line text-mute hover:text-ink"}`}>{n}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3"><Chips options={ALL_FEELINGS} value={feelings} onChange={setFeelings} /></div>
+            {mentalWarn.length > 0 && <p className="mt-2 text-xs text-warn">You're not at your best. Only take it if it's a textbook 8/8 — or skip and log why.</p>}
+          </Card>
         </div>
 
         <div className="space-y-4 lg:col-span-2">
+          <section className="coach p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-sm font-semibold"><Sparkle className="h-4 w-4 text-accent" /> Coach check</h2>
+              {coach?.enabled && <button className="btn-ghost h-8 min-h-0 text-xs" onClick={runCheck} disabled={checking || !valid}>{checking ? "Checking…" : check ? "Re-check" : "Check this trade"}</button>}
+            </div>
+            {check?.error && <p className="mt-2 text-sm text-down">{check.error}</p>}
+            {check && !check.error && (
+              <div className="mt-3 space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <Badge tone={check.verdict === "GO" ? "up" : check.verdict === "WAIT" ? "warn" : "down"}>{check.verdict ?? "—"}</Badge>
+                  <span>{check.summary}</span>
+                </div>
+                <ul className="space-y-1">{(check.checks ?? []).map((c, i) => <li key={i} className="flex gap-2"><span className={c.ok ? "text-up" : c.ok === false ? "text-down" : "text-warn"}>{c.ok ? "✓" : c.ok === false ? "✕" : "!"}</span><span>{c.text}</span></li>)}</ul>
+                {!!check.manage?.length && <div><div className="label mb-1">Management plan</div><ul className="list-disc space-y-0.5 pl-4">{check.manage.map((m, i) => <li key={i}>{m}</li>)}</ul></div>}
+                {!!check.lessons?.length && <div className="text-xs text-accent">{check.lessons.map((l, i) => <div key={i}>⟲ {l}</div>)}</div>}
+                {typeof check.reply === "string" && !check.checks && <Markdown text={check.reply} />}
+                <ActionChips actions={check.actions} />
+              </div>
+            )}
+            {!check && (
+              <div className="mt-2 text-sm text-mute">
+                {myLessons.length ? (
+                  <ul className="space-y-1.5">{myLessons.map((l) => <li key={l.id}><span className="text-ink">⟲ {l.title}</span>{l.rule ? <span className="block text-xs text-accent">→ {l.rule}</span> : null}</li>)}</ul>
+                ) : coach?.enabled ? "Enter levels, tick the gate, then ask for a second opinion before you click." : "Lessons you save will show up here before every entry."}
+              </div>
+            )}
+          </section>
+
           <Card title="Guardrails" action={breaches.length ? <Badge tone="down">{breaches.length} issue{breaches.length > 1 ? "s" : ""}</Badge> : <Badge tone="up">All clear</Badge>}>
             <div className="num grid grid-cols-2 gap-3 text-sm">
               <div><div className="label">Equity</div>{fmtUsd(state.equity)}</div>
@@ -237,7 +383,7 @@ export default function NewTrade() {
             )}
             <div className="mt-4 grid grid-cols-2 gap-2">
               <Segmented value={status} onChange={setStatus} size="xs" options={[{ value: "open", label: "Live / open" }, { value: "closed", label: "Already closed" }]} />
-              <button className={breaches.length && override ? "btn bg-down text-white" : "btn-primary"} disabled={!canSave || busy} onClick={submit}>
+              <button className={breaches.length && override ? "btn-danger" : "btn-primary"} disabled={!canSave || busy} onClick={submit}>
                 {busy ? "Saving…" : breaches.length ? "Log off-plan trade" : "Log A+ trade"}
               </button>
             </div>
@@ -258,6 +404,7 @@ export default function NewTrade() {
               <div className="mt-3 rounded-lg border border-line p-3 text-xs">
                 <div className="label mb-1">Today's plan</div>
                 <div>Bias: <b>{plan.bias ?? "—"}</b>{plan.magnet ? ` · Magnet: ${plan.magnet}` : ""}</div>
+                <div className="text-mute">Window: {windowLabel(acct, plan)}</div>
                 {plan.invalidation && <div className="text-mute">Invalid if: {plan.invalidation}</div>}
                 {plan.pois && <div className="mt-1 whitespace-pre-wrap text-mute">{plan.pois}</div>}
               </div>

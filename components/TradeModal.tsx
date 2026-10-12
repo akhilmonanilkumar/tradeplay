@@ -5,7 +5,11 @@ import { supabase } from "@/lib/supabase";
 import { useData } from "@/components/Shell";
 import { Badge, Chips, Field, Modal, numOrNull } from "@/components/ui";
 import { fmtIST, fmtR, fmtUsd } from "@/lib/calc";
-import { EMOTIONS, GATE_CHECKS, MISTAKES, type Trade } from "@/lib/types";
+import { ALL_FEELINGS, GATE_CHECKS, MISTAKES, type Trade } from "@/lib/types";
+import { EmotionTimeline, TradeDiagnosis } from "@/components/TradeInsight";
+import VoiceButton from "@/components/Voice";
+import { parseDictation } from "@/lib/analysis";
+import { askCoach, useCoachStatus } from "@/lib/coach";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -59,6 +63,7 @@ function Shot({ path, label, onUpload }: { path: string | null; label: string; o
 
 export default function TradeModal({ trade, onClose }: { trade: Trade | null; onClose: () => void }) {
   const { refresh, session, accounts, setups } = useData();
+  const coach = useCoachStatus();
   const [exit, setExit] = useState("");
   const [gross, setGross] = useState("");
   const [fees, setFees] = useState("");
@@ -170,6 +175,8 @@ export default function TradeModal({ trade, onClose }: { trade: Trade | null; on
         ))}
       </div>
 
+      <div className="mb-4"><TradeDiagnosis key={trade.id + trade.status} trade={trade} /></div>
+
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Exit price"><input className="input num" inputMode="decimal" value={exit} onChange={(e) => setExit(e.target.value)} /></Field>
         <Field label="Realized P&L $" hint={suggested != null && !gross ? `≈ ${fmtUsd(suggested, true)} from exit` : "Use your platform's figure"}>
@@ -180,10 +187,32 @@ export default function TradeModal({ trade, onClose }: { trade: Trade | null; on
 
       <div className="mt-4 space-y-3">
         <Field label="Mistakes"><Chips options={MISTAKES} value={mistakes} onChange={setMistakes} /></Field>
-        <Field label="Emotions"><Chips options={EMOTIONS} value={emotions} onChange={setEmotions} /></Field>
+        <Field label="Emotions (overall)"><Chips options={ALL_FEELINGS} value={emotions} onChange={setEmotions} /></Field>
         <Field label="Review — what to repeat, what to fix">
           <textarea className="input min-h-20" maxLength={5000} value={review} onChange={(e) => setReview(e.target.value)} />
         </Field>
+        <div className="-mt-1 flex justify-end">
+          <VoiceButton
+            size="sm"
+            label="Dictate review"
+            onInterim={(t) => setReview(t)}
+            onText={async (t) => {
+              setReview((r) => (r && !t.startsWith(r) ? `${r} ${t}` : t));
+              const local = parseDictation(t, accounts);
+              let f: Record<string, unknown> = { ...local };
+              if (coach?.enabled) {
+                const r = await askCoach("parse", { payload: { text: t, target: "journal" } });
+                if (r.fields && typeof r.fields === "object") f = { ...f, ...(r.fields as Record<string, unknown>) };
+              }
+              if (Array.isArray(f.mistakes)) setMistakes((m) => [...new Set([...m, ...(f.mistakes as string[]).filter((x) => MISTAKES.includes(x))])]);
+              if (Array.isArray(f.emotions)) setEmotions((m) => [...new Set([...m, ...(f.emotions as string[]).filter((x) => ALL_FEELINGS.includes(x))])]);
+              if (typeof f.exit === "number" && !exit) setExit(String(f.exit));
+              if (typeof f.gross_pnl === "number" && !gross) setGross(String(f.gross_pnl));
+              if (typeof f.fees === "number" && !fees) setFees(String(f.fees));
+            }}
+          />
+        </div>
+        <EmotionTimeline key={`em-${trade.id}`} trade={trade} />
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3">

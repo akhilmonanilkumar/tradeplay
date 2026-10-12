@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useData } from "@/components/Shell";
 import { Badge, Empty, PageHead, Segmented } from "@/components/ui";
 import TradeModal from "@/components/TradeModal";
@@ -18,6 +18,19 @@ export default function Trades() {
   const [account, setAccount] = useState("all");
   const [q, setQ] = useState("");
   const [edit, setEdit] = useState<Trade | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const st = p.get("status");
+    if (st && ["all", "open", "closed", "cancelled"].includes(st)) setStatus(st as StatusF);
+    setOpenId(p.get("open"));
+  }, []);
+  useEffect(() => {
+    if (!openId) return;
+    const t = trades.find((x) => x.id === openId);
+    if (t) setEdit(t);
+    setOpenId(null);
+  }, [openId, trades]);
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -95,7 +108,7 @@ export default function Trades() {
               {rows.map((t) => {
                 const net = t.net_pnl;
                 return (
-                  <tr key={t.id} onClick={() => setEdit(t)} className="cursor-pointer border-b border-line/60 transition last:border-0 hover:bg-line/30">
+                  <tr key={t.id} onClick={() => setEdit(t)} className="cursor-pointer border-b border-line/60 transition last:border-0 hover:bg-raised">
                     <td className="num px-3 py-2.5 text-mute">{fmtIST(t.opened_at)}</td>
                     <td className="px-3 py-2.5">
                       <span className="flex items-center gap-1.5">

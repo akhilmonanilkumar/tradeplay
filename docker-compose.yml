@@ -12,12 +12,24 @@ services:
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
     environment:
       ALLOWED_IPS: ${ALLOWED_IPS:-}
+      APP_URL: ${APP_URL:-}
+      # AI coach (server-side only; any one provider is enough) — see docs/ai-coach.md
+      AI_MODELS: ${AI_MODELS:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      COMPAT_BASE_URL: ${COMPAT_BASE_URL:-}
+      COMPAT_API_KEY: ${COMPAT_API_KEY:-}
+      AI_STT_MODEL: ${AI_STT_MODEL:-}
+      NEWS_FEEDS: ${NEWS_FEEDS:-}
     expose:
       - "3000"          # no host port: only Caddy can reach it, and 2 replicas can run during a rollout
     restart: unless-stopped
     read_only: true
     tmpfs:
       - /tmp
+      - /app/.next/cache:mode=1777   # fetch cache for market data (read-only root FS)
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     deploy:

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { fmtR } from "@/lib/calc";
 
 /* Shared tooltip */
@@ -21,18 +21,23 @@ export function LineChart({
   height = 220,
   format = fmtR,
   label = (t: number) => new Date(t).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+  color,
+  startAtZero = true,
 }: {
   points: { t: number; v: number; note?: string }[];
   height?: number;
   format?: (v: number) => string;
   label?: (t: number) => string;
+  color?: "up" | "down" | "accent" | "warn";
+  startAtZero?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const gid = useId().replace(/:/g, "");
   const [hover, setHover] = useState<number | null>(null);
   const W = 800;
   const H = height;
   const pad = { l: 8, r: 8, t: 12, b: 18 };
-  const data = points.length ? [{ t: points[0].t, v: 0 }, ...points] : [];
+  const data = points.length ? (startAtZero ? [{ t: points[0].t, v: 0 }, ...points] : points) : [];
   const vs = data.map((p) => p.v);
   const min = Math.min(0, ...vs);
   const max = Math.max(0, ...vs);
@@ -42,7 +47,7 @@ export function LineChart({
   const path = data.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join("");
   const area = data.length ? `${path}L${x(data.length - 1)},${y(min)}L${x(0)},${y(min)}Z` : "";
   const last = data.at(-1)?.v ?? 0;
-  const tone = last >= 0 ? "rgb(var(--up))" : "rgb(var(--down))";
+  const tone = color ? `rgb(var(--${color}))` : last >= 0 ? "rgb(var(--up))" : "rgb(var(--down))";
 
   if (!points.length) return <div className="grid h-40 place-items-center text-sm text-mute">No closed trades yet</div>;
 
@@ -62,13 +67,13 @@ export function LineChart({
     <div ref={ref} className="relative select-none" onMouseMove={onMove} onTouchMove={onMove} onMouseLeave={() => setHover(null)} onTouchEnd={() => setHover(null)}>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-auto w-full" style={{ height }}>
         <defs>
-          <linearGradient id="lc-fill" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={`lc-${gid}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor={tone} stopOpacity="0.22" />
             <stop offset="1" stopColor={tone} stopOpacity="0" />
           </linearGradient>
         </defs>
         <line x1={pad.l} x2={W - pad.r} y1={y(0)} y2={y(0)} stroke="rgb(var(--line))" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
-        <path d={area} fill="url(#lc-fill)" />
+        <path d={area} fill={`url(#lc-${gid})`} />
         <path d={path} fill="none" stroke={tone} strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
         {hp && hover != null && (
           <>
@@ -112,7 +117,7 @@ export function HBars({
             key={r.key}
             type="button"
             onClick={() => onPick?.(r.key)}
-            className={`grid w-full grid-cols-[minmax(0,9rem)_1fr_4.5rem] items-center gap-3 rounded-md px-1.5 py-1 text-left text-xs transition ${active === r.key ? "bg-accent/10 ring-1 ring-accent/40" : "hover:bg-line/40"}`}
+            className={`grid w-full grid-cols-[minmax(0,9rem)_1fr_4.5rem] items-center gap-3 rounded-md px-1.5 py-1 text-left text-xs transition ${active === r.key ? "bg-accent/10 ring-1 ring-accent/40" : "hover:bg-raised"}`}
           >
             <span className="truncate" title={r.key}>{r.key}</span>
             <span className="relative h-2.5">
@@ -303,6 +308,93 @@ export function Ring({ value, size = 96, label }: { value: number | null; size?:
           <div className="num text-xl font-semibold">{value ?? "—"}</div>
           {label && <div className="text-[10px] text-mute">{label}</div>}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Scatter (x numeric, y = R) — HTML dots so they stay round at any width ---------- */
+export function Scatter({ points, xLabel, height = 200, onPick }: { points: { x: number; y: number; id?: string }[]; xLabel: (x: number) => string; height?: number; onPick?: (id: string) => void }) {
+  const [hover, setHover] = useState<number | null>(null);
+  if (!points.length) return <div className="py-6 text-center text-sm text-mute">No data</div>;
+  const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs, x0 + 1);
+  const y0 = Math.min(-1, ...ys), y1 = Math.max(1, ...ys);
+  const X = (v: number) => 3 + ((v - x0) / (x1 - x0)) * 94;
+  const Y = (v: number) => 4 + (1 - (v - y0) / (y1 - y0)) * 88;
+  const hp = hover != null ? points[hover] : null;
+  return (
+    <div className="relative" style={{ height }}>
+      <div className="absolute inset-x-0 border-t border-dashed border-line" style={{ top: `${Y(0)}%` }} />
+      <span className="absolute left-0 -translate-y-1/2 text-[10px] text-mute" style={{ top: `${Y(0)}%` }}>0R</span>
+      {points.map((p, i) => (
+        <button
+          key={i}
+          type="button"
+          aria-label={`${xLabel(p.x)}, ${fmtR(p.y)}`}
+          onMouseEnter={() => setHover(i)}
+          onMouseLeave={() => setHover(null)}
+          onClick={() => p.id && onPick?.(p.id)}
+          className={`absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-transform hover:scale-150 ${p.y >= 0 ? "bg-up/80" : "bg-down/80"}`}
+          style={{ left: `${X(p.x)}%`, top: `${Y(p.y)}%` }}
+        />
+      ))}
+      <span className="absolute bottom-0 left-[3%] text-[10px] text-mute">{xLabel(x0)}</span>
+      <span className="absolute bottom-0 right-[3%] text-[10px] text-mute">{xLabel(x1)}</span>
+      {hp && <div className="num absolute right-2 top-0 rounded-md border border-line bg-panel px-2 py-1 text-[11px]">{xLabel(hp.x)} · {fmtR(hp.y)}</div>}
+    </div>
+  );
+}
+
+/* ---------- Percentile bands (Monte Carlo) ---------- */
+export function Bands({ rows, height = 220, lines = [], format }: { rows: { day: number; p10: number; p50: number; p90: number }[]; height?: number; lines?: { v: number; label: string; tone: "up" | "down" }[]; format: (v: number) => string }) {
+  if (!rows.length) return null;
+  const W = 800, H = height, pad = { l: 8, r: 8, t: 12, b: 18 };
+  const vals = [...rows.flatMap((r) => [r.p10, r.p90]), ...lines.map((l) => l.v)];
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || 1;
+  const X = (i: number) => pad.l + (i / Math.max(1, rows.length - 1)) * (W - pad.l - pad.r);
+  const Y = (v: number) => pad.t + (1 - (v - lo) / span) * (H - pad.t - pad.b);
+  const band = rows.map((r, i) => `${i ? "L" : "M"}${X(i)},${Y(r.p90)}`).join("") + rows.slice().reverse().map((r, i) => `L${X(rows.length - 1 - i)},${Y(r.p10)}`).join("") + "Z";
+  const mid = rows.map((r, i) => `${i ? "L" : "M"}${X(i)},${Y(r.p50)}`).join("");
+  return (
+    <div className="relative">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height }} preserveAspectRatio="none">
+        <path d={band} fill="rgb(var(--accent) / 0.15)" />
+        <path d={mid} fill="none" stroke="rgb(var(--accent))" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+        {lines.map((l) => (
+          <g key={l.label}>
+            <line x1={pad.l} x2={W - pad.r} y1={Y(l.v)} y2={Y(l.v)} stroke={`rgb(var(--${l.tone}))`} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" />
+          </g>
+        ))}
+      </svg>
+      <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-mute">
+        <span><span className="mr-1 inline-block h-2 w-3 rounded-sm bg-accent/30" />10–90% of paths</span>
+        <span><span className="mr-1 inline-block h-0.5 w-3 bg-accent align-middle" />median</span>
+        {lines.map((l) => <span key={l.label} className={l.tone === "up" ? "text-up" : "text-down"}>— {l.label} {format(l.v)}</span>)}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Vertical bars with labels ---------- */
+export function VBars({ rows, format = fmtR, height = 140 }: { rows: { key: string; value: number; sub?: string }[]; format?: (v: number) => string; height?: number }) {
+  if (!rows.length) return <div className="py-6 text-center text-sm text-mute">No data</div>;
+  const maxAbs = Math.max(0.0001, ...rows.map((r) => Math.abs(r.value)));
+  return (
+    <div>
+      <div className="flex items-stretch gap-1.5" style={{ height }}>
+        {rows.map((r) => (
+          <div key={r.key} className="flex flex-1 flex-col" title={`${r.key}: ${format(r.value)}${r.sub ? ` · ${r.sub}` : ""}`}>
+            <div className="relative flex-1">
+              <div className="absolute inset-x-0 top-1/2 h-px bg-line" />
+              <div className={`absolute inset-x-1 rounded-sm ${r.value >= 0 ? "bg-up/75" : "bg-down/75"}`}
+                style={r.value >= 0 ? { bottom: "50%", height: `${(Math.abs(r.value) / maxAbs) * 50}%` } : { top: "50%", height: `${(Math.abs(r.value) / maxAbs) * 50}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 flex gap-1.5">
+        {rows.map((r) => <div key={r.key} className="flex-1 truncate text-center text-[10px] text-mute">{r.key}<div className="num text-ink">{format(r.value)}</div></div>)}
       </div>
     </div>
   );

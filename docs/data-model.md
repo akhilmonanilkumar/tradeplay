@@ -20,7 +20,7 @@ One row per prop/live account — firm rules **and** your personal plan.
 | `hard_stop_equity` | Stop trading the account at/below this equity |
 | `risk_ladder` | `[{min_equity, risk_pct, max_trades}]` — first tier with equity ≥ `min_equity` applies |
 | `loss_streak_n`, `loss_streak_risk_pct` | After N consecutive losses, cap risk at this % |
-| `session_window` | `London` · `New York` · `Asia` · `Any` (DST-aware Q-zones) |
+| `session_window` | Default session: `London` · `New York` · `Asia` · `Any` (DST-aware Q-zones); the day plan can override |
 | `contract_size`, `fee_rate` | Sizing: gold 100 oz/lot & 0; BTC 1 & 0.0008 round-trip |
 | `min_profitable_days`, `notes` | Challenge requirement, free text |
 
@@ -50,7 +50,21 @@ One row per prop/live account — firm rules **and** your personal plan.
 | `gate_score` | 7 checks + (`rr_planned ≥ 3`) → 0–8; 8 = A+ |
 
 ## day_plans
-One per account per IST date (`unique(account_id, plan_date)`): `bias` (`long`/`short`/`neutral`), `htf_range`, `magnet`, `invalidation`, `pois`, `news_times[]` (IST `HH:MM`, entries blocked ±15 min), `checklist` (jsonb of the 6 pre-market items), `notes`.
+One per account per IST date (`unique(account_id, plan_date)`): `bias` (`long`/`short`/`neutral`), `htf_range`, `magnet`, `invalidation`, `pois`, `news_times[]` (IST `HH:MM`, entries blocked ±15 min), `checklist` (jsonb of the 6 pre-market items), `notes`, `sessions[]` (`Asia`/`London`/`New York`/`Custom`/`Any`; empty = account default), `custom_window` (IST `HH:MM-HH:MM`).
+
+## Added in migration 0005 (`sessions_coach`)
+| Table / column | Purpose |
+|---|---|
+| `trades.emotion_log` | jsonb array `[{at, stage: pre/during/post, emotions[], intensity, note}]` (≤50) |
+| `trades.mental` | jsonb `{focus, confidence, patience, energy, stress}` 1–5, rated before entry |
+| `balance_adjustments` | Signed equity corrections (deposits, swaps, "sync to broker") — included in equity |
+| `lessons` | Win/loss causes and the rule not to repeat (`trade_id`, `account_id`, `kind`, `title`, `cause`, `rule`, `tags[]`, `source` manual/auto/ai, `active`) |
+| `reminders` | Timed reminders (`text`, `due_at`, `done`, `source`) → bell + system notifications |
+| `checkins` | Daily mental check-in (mood/energy/focus/stress 1–5, sleep, feelings, note), one per day |
+| `ai_threads`, `ai_messages` | Coach conversations (trigger enforces messages belong to your own thread) |
+| `ai_memory` | Facts/preferences/goals/rules the coach always knows (pin/forget) |
+| `kb_docs` | Knowledgebase chunks (≤12k chars) with a generated `tsvector`; `kb_search(q, n)` ranks them |
+| `daily_briefs` | Cached outlook/brief per day (`unique(user_id, brief_date, kind)`) |
 
 ## setups
 `name`, `model`, `rules`, `active`. Seeded: *Market Shift → Pullback*, *Flip Zone*, *Sweep → OB → FVG*.
