@@ -1,0 +1,15 @@
+{$DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy app:3000 {
+		# Docker DNS returns every healthy replica; retry on another one during rollouts
+		lb_policy round_robin
+		lb_try_duration 10s
+		fail_duration 10s
+		health_uri /api/health
+		health_interval 5s
+		# The app's IP allowlist trusts X-Real-IP — Caddy sets it from the real client socket
+		header_up X-Real-IP {remote_host}
+		header_up -X-Forwarded-For
+	}
+}
