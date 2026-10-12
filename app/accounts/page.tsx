@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useData } from "@/components/Shell";
-import { Badge, Card, Field, PageHead, numOrNull } from "@/components/ui";
+import { Badge, Card, Field, Modal, PageHead, numOrNull } from "@/components/ui";
 import { accountState, fmtUsd } from "@/lib/calc";
 import { supabase } from "@/lib/supabase";
 import type { Account, Setup, Tier } from "@/lib/types";
@@ -64,6 +64,33 @@ function AccountEditor({ account }: { account: Account }) {
     const { error } = await supabase.from("payouts").insert({ account_id: account.id, amount, paid_at: payout.paid_at, note: payout.note || null });
     if (error) return setErr(error.message);
     setPayout({ ...payout, amount: "", note: "" });
+    refresh();
+  }
+
+  const myTrades = trades.filter((t) => t.account_id === account.id);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  async function archive() {
+    const { error } = await supabase.from("accounts").update({ status: "closed" }).eq("id", account.id);
+    if (error) return setErr(error.message);
+    setConfirmDel(false);
+    refresh();
+  }
+
+  async function deleteAccount() {
+    if (typed.trim() !== account.name.trim()) return;
+    setDeleting(true);
+    setErr(null);
+    // Screenshots live in storage, not the table — remove them first so nothing is orphaned.
+    const files = myTrades.flatMap((t) => [t.before_path, t.after_path]).filter((p): p is string => !!p);
+    for (let i = 0; i < files.length; i += 100) await supabase.storage.from("screenshots").remove(files.slice(i, i + 100));
+    // trades, payouts and day plans cascade in the database.
+    const { error } = await supabase.from("accounts").delete().eq("id", account.id);
+    setDeleting(false);
+    if (error) return setErr(error.message);
+    setConfirmDel(false);
     refresh();
   }
 
@@ -135,10 +162,32 @@ function AccountEditor({ account }: { account: Account }) {
 
       <Field label="Notes"><textarea className="input mt-4 min-h-16" maxLength={4000} value={a.notes ?? ""} onChange={(e) => setA({ ...a, notes: e.target.value })} /></Field>
       {err && <p className="mt-2 text-sm text-down">{err}</p>}
-      <div className="mt-3 flex items-center justify-end gap-3">
-        <span className="text-xs text-mute">{state === "saved" ? "Saved" : ""}</span>
-        <button className="btn-primary" onClick={save} disabled={state === "saving"}>Save account</button>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <button className="text-xs text-mute hover:text-down" onClick={() => { setTyped(""); setConfirmDel(true); }}>Delete account…</button>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-mute">{state === "saved" ? "Saved" : ""}</span>
+          <button className="btn-primary" onClick={save} disabled={state === "saving"}>Save account</button>
+        </div>
       </div>
+
+      <Modal open={confirmDel} onClose={() => setConfirmDel(false)} title={`Delete “${account.name}”?`}>
+        <p className="text-sm text-mute">
+          This permanently removes the account and <b className="text-ink">{myTrades.length} trade{myTrades.length === 1 ? "" : "s"}</b>,{" "}
+          <b className="text-ink">{myPayouts.length} payout{myPayouts.length === 1 ? "" : "s"}</b>, its daily plans and screenshots. It cannot be undone.
+        </p>
+        {myTrades.length > 0 && (
+          <p className="mt-2 text-sm text-mute">Keeping history? <button className="text-accent" onClick={archive}>Mark it closed instead</button> — it disappears from Today but stays in Insights.</p>
+        )}
+        <Field label="Type the account name to confirm">
+          <input className="input" autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={account.name} />
+        </Field>
+        <div className="mt-4 flex justify-end gap-2">
+          <button className="btn-ghost" onClick={() => setConfirmDel(false)}>Cancel</button>
+          <button className="btn bg-down text-white disabled:opacity-40" disabled={typed.trim() !== account.name.trim() || deleting} onClick={deleteAccount}>
+            {deleting ? "Deleting…" : "Delete permanently"}
+          </button>
+        </div>
+      </Modal>
 
       <div className="mt-6 border-t border-line pt-4">
         <div className="label mb-2">Payouts / withdrawals</div>
@@ -177,6 +226,11 @@ function Setups() {
     await supabase.from("setups").update({ active: !s.active }).eq("id", s.id);
     refresh();
   }
+  async function remove(s: Setup) {
+    if (!confirm(`Delete setup “${s.name}”? Trades keep their data but lose the setup tag.`)) return;
+    await supabase.from("setups").delete().eq("id", s.id);
+    refresh();
+  }
 
   return (
     <Card title="Setups">
@@ -187,7 +241,10 @@ function Setups() {
               <div className="text-sm font-medium">{s.name} {!s.active && <Badge>inactive</Badge>}</div>
               {s.rules && <p className="mt-0.5 text-xs text-mute">{s.rules}</p>}
             </div>
-            <button className="shrink-0 text-xs text-mute hover:text-ink" onClick={() => toggle(s)}>{s.active ? "Disable" : "Enable"}</button>
+            <div className="flex shrink-0 gap-3">
+              <button className="text-xs text-mute hover:text-ink" onClick={() => toggle(s)}>{s.active ? "Disable" : "Enable"}</button>
+              <button className="text-xs text-mute hover:text-down" onClick={() => remove(s)}>Delete</button>
+            </div>
           </li>
         ))}
       </ul>
