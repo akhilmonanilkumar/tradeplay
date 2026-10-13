@@ -1,5 +1,6 @@
 "use client";
 
+import { getTimeZone } from "@/lib/tz";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
@@ -236,7 +237,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 <span className="text-[15px] font-semibold tracking-tight"><span className="text-accent">A+</span> TradePlay</span>
               </Link>
               <div className="hidden text-sm text-mute md:block">
-                {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" })}
+                {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: getTimeZone() })}
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => setPalette(true)} className="hidden h-11 items-center gap-3 rounded-full bg-panel px-4 text-sm text-mute shadow-[var(--shadow)] hover:text-ink sm:flex" aria-label="Search and actions">

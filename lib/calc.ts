@@ -1,4 +1,5 @@
 import type { Account, Adjustment, DayPlan, Payout, SessionName, Tier, Trade } from "./types";
+import { getTimeZone, localToUtc, tzAbbr, wall } from "./tz.ts";
 
 /* ---------- basic trade math ---------- */
 
@@ -239,14 +240,14 @@ export function activeSessions(account: Pick<Account, "session_window">, plan?: 
 
 export function windowLabel(account: Pick<Account, "session_window">, plan?: PlanSessions): string {
   return activeSessions(account, plan)
-    .map((s) => (s === "Custom" && plan?.custom_window ? `${plan.custom_window} IST` : s))
+    .map((s) => (s === "Custom" && plan?.custom_window ? `${plan.custom_window} ${tzAbbr()}` : s))
     .join(" / ");
 }
 
-/** Minutes since IST midnight. */
+/** Minutes since local midnight in the trader's timezone. */
 function istMinutes(d: Date): number {
-  const ist = new Date(d.getTime() + 5.5 * 3600 * 1000);
-  return ist.getUTCHours() * 60 + ist.getUTCMinutes();
+  const w = wall(d);
+  return w.getUTCHours() * 60 + w.getUTCMinutes();
 }
 
 /** "HH:MM-HH:MM" (IST) contains d; supports windows that cross midnight. */
@@ -278,14 +279,14 @@ export function msToWindow(account: Pick<Account, "session_window">, d = new Dat
 
 /** Today's plan date in IST (YYYY-MM-DD). */
 export function todayIST(d = new Date()): string {
-  return new Date(d.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  return wall(d).toISOString().slice(0, 10);
 }
 
 /** Returns the news time (IST "HH:MM") currently blocking entries, if within ±15 min. */
 export function newsBlock(plan: Pick<DayPlan, "news_times" | "plan_date"> | null | undefined, d = new Date(), minutes = 15): string | null {
   if (!plan) return null;
   for (const hm of plan.news_times ?? []) {
-    const t = new Date(`${plan.plan_date}T${hm.length === 5 ? hm : hm.slice(0, 5)}:00+05:30`).getTime();
+    const t = localToUtc(plan.plan_date, hm.slice(0, 5));
     if (Number.isFinite(t) && Math.abs(d.getTime() - t) <= minutes * 60000) return hm;
   }
   return null;
@@ -406,7 +407,7 @@ export function fmtPct(n: number, digits = 0): string {
 export function fmtIST(iso: string | Date, withDate = true): string {
   const d = typeof iso === "string" ? new Date(iso) : iso;
   return d.toLocaleString("en-IN", {
-    timeZone: "Asia/Kolkata",
+    timeZone: getTimeZone(),
     ...(withDate ? { day: "2-digit", month: "short" } : {}),
     hour: "2-digit",
     minute: "2-digit",
@@ -416,14 +417,14 @@ export function fmtIST(iso: string | Date, withDate = true): string {
 
 /** Monday 00:00 IST of the week containing d, returned as YYYY-MM-DD. */
 export function weekStartIST(d = new Date()): string {
-  const ist = new Date(d.getTime() + 5.5 * 3600 * 1000);
+  const ist = wall(d);
   const day = (ist.getUTCDay() + 6) % 7;
   ist.setUTCDate(ist.getUTCDate() - day);
   return ist.toISOString().slice(0, 10);
 }
 
 export function inWeekIST(iso: string, weekStart: string): boolean {
-  const startMs = new Date(`${weekStart}T00:00:00+05:30`).getTime();
+  const startMs = localToUtc(weekStart, "00:00");
   const t = new Date(iso).getTime();
   return t >= startMs && t < startMs + 7 * 86400 * 1000;
 }

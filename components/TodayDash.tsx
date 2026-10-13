@@ -1,5 +1,6 @@
 "use client";
 
+import { getTimeZone } from "@/lib/tz";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useData, Icon } from "@/components/Shell";
@@ -201,7 +202,7 @@ export function TradesTable({ onOpen }: { onOpen: (t: Trade) => void }) {
           {rows.map((t) => (
             <li key={t.id}>
               <button onClick={() => onOpen(t)} className="grid w-full grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-2 border-b border-line/70 py-2.5 text-left text-[13px] last:border-0 hover:text-ink">
-                <span className="text-mute">{new Date(t.opened_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" })}</span>
+                <span className="text-mute">{new Date(t.opened_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: getTimeZone() })}</span>
                 <span className="truncate">
                   <span className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${t.direction === "long" ? "bg-up" : "bg-down"}`} />
                   {t.instrument.replace("USDT.P", "")}
@@ -308,7 +309,7 @@ export function NextEventCard({ events, now }: { events: EconEvent[]; now: Date 
       <div className="text-[15px] font-semibold">{next.country} {next.title}</div>
       <div className="mt-1 flex items-center gap-2 text-[13px]">
         <span className={`h-2 w-2 rounded-full ${live ? "animate-pulse bg-[#FB7185]" : "bg-[#FB7185]"}`} />
-        {new Date(next.at).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" })} at {fmtIST(next.at, false)} IST
+        {new Date(next.at).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: getTimeZone() })} at {fmtIST(next.at, false)} IST
       </div>
       <p className="mt-2 text-xs leading-relaxed text-[#9AA0AA]">
         {nt && <>No entries {fmtIST(new Date(nt.from), false)}–{fmtIST(new Date(nt.to), false)}. </>}

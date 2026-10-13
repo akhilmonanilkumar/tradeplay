@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/coach";
 import { riskWindows, newsTimesFor, activeWindow, type RiskWindow } from "@/lib/events";
 import { todayIST, fmtIST } from "@/lib/calc";
+import { tzAbbr } from "@/lib/tz";
 import { supabase } from "@/lib/supabase";
 import { useData } from "@/components/Shell";
 import { Badge, Card, Segmented } from "@/components/ui";
@@ -112,7 +113,7 @@ export function EconWeek({ market }: { market: ReturnType<typeof useMarket> }) {
       const { error } = await supabase.from("day_plans").upsert({ account_id: a.id, plan_date: today, news_times: merged }, { onConflict: "account_id,plan_date" });
       if (error) return setMsg(error.message);
     }
-    setMsg(`Added ${todaysTimes.join(", ")} IST to today's plans — entries blocked ±15 min.`);
+    setMsg(`Added ${todaysTimes.join(", ")} ${tzAbbr()} to today's plans — entries blocked ±15 min.`);
     refresh();
   }
   async function remind() {
@@ -128,7 +129,7 @@ export function EconWeek({ market }: { market: ReturnType<typeof useMarket> }) {
 
   return (
     <Card
-      title="This week · economic calendar (IST)"
+      title={`This week · economic calendar (${tzAbbr()})`}
       action={<Segmented size="xs" value={filter} onChange={setFilter} options={[{ value: "high", label: "High" }, { value: "all", label: "High + Med" }]} />}
     >
       {live && (

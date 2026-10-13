@@ -1,5 +1,6 @@
 "use client";
 
+import { getTimeZone } from "@/lib/tz";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useData } from "@/components/Shell";
@@ -7,7 +8,7 @@ import { Badge, Card, Chips } from "@/components/ui";
 import { Ring } from "@/components/Charts";
 import VoiceButton from "@/components/Voice";
 import { ActionChips, CoachSetupNote, Markdown, Sparkle } from "@/components/coach-ui";
-import { askCoach, useCoachStatus, type CoachResult } from "@/lib/coach";
+import { askCoach, asList, asObjects, asText, useCoachStatus, type CoachResult } from "@/lib/coach";
 import { disciplineScore, fmtR, fmtUsd, stats, todayIST, weekStartIST, fmtIST } from "@/lib/calc";
 import { streaks, matchLessons } from "@/lib/analysis";
 import { nudges } from "@/lib/nudges";
@@ -26,7 +27,7 @@ export function QuoteHero({ now }: { now: Date }) {
     <section className="coach relative overflow-hidden p-5 sm:p-6">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-mute">
         <span className="font-medium uppercase tracking-[0.12em] text-accent">Today's quote</span>
-        <span>{greet} · {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Kolkata" })}</span>
+        <span>{greet} · {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: getTimeZone() })}</span>
       </div>
       <blockquote className="mt-3 max-w-3xl text-[19px] font-medium leading-snug tracking-tight sm:text-[22px]">“{quote.text}”</blockquote>
       <div className="mt-2 text-sm text-mute">— {quote.by}{quote.note ? <span className="opacity-80"> ({quote.note})</span> : null}</div>
@@ -311,10 +312,20 @@ export function OutlookCard() {
         <p className="text-sm text-down">{res.error}</p>
       ) : res ? (
         <div className="space-y-4">
-          {res.headline && <p className="text-[17px] font-medium leading-snug">{res.headline}</p>}
-          {res.focus && <p className="text-sm"><span className="text-accent">Focus:</span> {res.focus}</p>}
+          {res.headline && <p className="text-[17px] font-medium leading-snug">{asText(res.headline)}</p>}
+          {res.focus && <p className="text-sm"><span className="text-accent">Focus:</span> {asText(res.focus)}</p>}
           <div className="grid gap-3 lg:grid-cols-2">
-            {(res.instruments ?? []).map((ins) => (
+            {asObjects<NonNullable<Outlook["instruments"]>[number]>(res.instruments).map((raw) => ({
+              ...raw,
+              symbol: asText(raw.symbol),
+              stance: asText(raw.stance),
+              context: asText(raw.context),
+              sessions: asText(raw.sessions),
+              drivers: asList(raw.drivers),
+              watch: asList(raw.watch),
+              avoid: asList(raw.avoid),
+              scenarios: Array.isArray(raw.scenarios) ? raw.scenarios.map((x) => (typeof x === "string" ? { if: x, then: "" } : { if: asText((x as { if?: unknown }).if), then: asText((x as { then?: unknown }).then) })) : [],
+            })).map((ins) => (
               <div key={ins.symbol} className="rounded-xl border border-line bg-panel/60 p-3.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold">{ins.symbol}</span>
@@ -326,7 +337,7 @@ export function OutlookCard() {
                 {!!ins.scenarios?.length && (
                   <div className="mt-2.5">
                     <div className="label mb-1">Scenarios</div>
-                    <ul className="space-y-1 text-sm">{ins.scenarios.map((s, i) => <li key={i}><span className="text-mute">If</span> {s.if} <span className="text-mute">→</span> {s.then}</li>)}</ul>
+                    <ul className="space-y-1 text-sm">{ins.scenarios.map((s, i) => <li key={i}><span className="text-mute">If</span> {s.if}{s.then ? <> <span className="text-mute">→</span> {s.then}</> : null}</li>)}</ul>
                   </div>
                 )}
                 {!!ins.avoid?.length && <List title="No trade if" items={ins.avoid} tone="down" />}
@@ -334,8 +345,8 @@ export function OutlookCard() {
               </div>
             ))}
           </div>
-          {!!res.calendar?.length && <List title="Calendar" items={res.calendar} />}
-          {res.reply && !res.instruments && <Markdown text={String(res.reply)} />}
+          {asList(res.calendar).length > 0 && <List title="Calendar" items={asList(res.calendar)} />}
+          {res.reply && !Array.isArray(res.instruments) && <Markdown text={asText(res.reply)} />}
           <ActionChips actions={res.actions} />
           <p className="text-[11px] text-mute">Scenarios, not predictions — built from your playbook, knowledgebase, public prices and headlines. Confirm every level on your own chart.</p>
         </div>

@@ -1,4 +1,5 @@
 import { msToWindow, todayIST, weekStartIST, windowLabel } from "./calc.ts";
+import { localToUtc, tzAbbr, wall } from "./tz.ts";
 import type { Account, DayPlan, Reminder, Review, Trade } from "./types.ts";
 
 export type Nudge = { id: string; text: string; href: string; level: "due" | "warn" | "info"; reminderId?: string };
@@ -20,10 +21,10 @@ export function nudges(now: Date, d: Input): Nudge[] {
     if (!plan) out.push({ id: `plan:${a.id}:${today}`, text: `Write today's plan for ${a.name}`, href: `/plan?account=${a.id}`, level: "warn" });
 
     for (const hm of plan?.news_times ?? []) {
-      const t = new Date(`${today}T${hm.slice(0, 5)}:00+05:30`).getTime();
+      const t = localToUtc(today, hm.slice(0, 5));
       const mins = Math.round((t - now.getTime()) / 60000);
       if (mins > 0 && mins <= 30)
-        out.push({ id: `news:${a.id}:${hm}`, text: `News at ${hm} IST in ${mins}m — ${a.instrument} entries blocked ±15 min`, href: "/", level: "warn" });
+        out.push({ id: `news:${a.id}:${hm}`, text: `News at ${hm} ${tzAbbr()} in ${mins}m — ${a.instrument} entries blocked ±15 min`, href: "/", level: "warn" });
     }
 
     const wait = msToWindow(a, now, plan);
@@ -41,7 +42,7 @@ export function nudges(now: Date, d: Input): Nudge[] {
   ).length;
   if (unreviewed) out.push({ id: `unrev:${unreviewed}`, text: `${unreviewed} closed trade${unreviewed > 1 ? "s" : ""} waiting for a review note`, href: "/trades?status=closed", level: "info" });
 
-  const istDay = new Date(now.getTime() + 5.5 * 3600000).getUTCDay(); // 0 Sun
+  const istDay = wall(now).getUTCDay(); // 0 Sun
   const week = weekStartIST(now);
   if ((istDay === 6 || istDay === 0) && !d.reviews.some((r) => r.week_start === week))
     out.push({ id: `review:${week}`, text: "Weekly review is due", href: "/review", level: "warn" });

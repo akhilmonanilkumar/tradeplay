@@ -152,14 +152,26 @@ export async function complete(o: CallOpts): Promise<string> {
       };
       if (o.json) body.response_format = { type: "json_object" };
       if (o.webSearch) body.plugins = [{ id: "web", max_results: 4 }]; // paid add-on (uses credits)
-      const j = await post("https://openrouter.ai/api/v1/chat/completions", {
+      const headers = {
         authorization: `Bearer ${key}`,
-        "HTTP-Referer": env("APP_URL") || "https://github.com/akhilmonanilkumar/tradeplay",
+        "HTTP-Referer": env("APP_URL") || "https://tradeplay.cloud",
         "X-Title": "A+ TradePlay",
-      }, body);
+      };
+      let j: any;
+      try {
+        j = await post("https://openrouter.ai/api/v1/chat/completions", headers, body);
+      } catch (e) {
+        // Some free models reject JSON mode or plugins — retry once in plain mode (the prompt still asks for JSON).
+        if (e instanceof ProviderError && e.status === 400 && (body.response_format || body.plugins)) {
+          delete body.response_format;
+          delete body.plugins;
+          j = await post("https://openrouter.ai/api/v1/chat/completions", headers, body);
+        } else throw e;
+      }
       if (j.error) throw new ProviderError(Number(j.error.code) || 502, j.error.message ?? "OpenRouter error");
       const used = j.model && j.model !== o.model.model ? `\n\n_(answered by ${j.model})_` : "";
-      const text = j.choices?.[0]?.message?.content ?? "";
+      const text: string = j.choices?.[0]?.message?.content ?? "";
+      if (!text.trim()) throw new ProviderError(502, `${j.model ?? o.model.model} returned an empty answer — try another model in Coach → Engine`);
       return o.json ? text : text + used;
     }
     case "openai":
@@ -173,7 +185,15 @@ export async function complete(o: CallOpts): Promise<string> {
       else body.max_tokens = max;
       if (o.json && o.model.provider === "openai") body.response_format = { type: "json_object" };
       const headers: Record<string, string> = key && key !== "none" ? { authorization: `Bearer ${key}` } : {};
-      const j = await post(`${base.replace(/\/$/, "")}/chat/completions`, headers, body);
+      let j: any;
+      try {
+        j = await post(`${base.replace(/\/$/, "")}/chat/completions`, headers, body);
+      } catch (e) {
+        if (e instanceof ProviderError && e.status === 400 && body.response_format) {
+          delete body.response_format;
+          j = await post(`${base.replace(/\/$/, "")}/chat/completions`, headers, body);
+        } else throw e;
+      }
       return j.choices?.[0]?.message?.content ?? "";
     }
     case "google": {

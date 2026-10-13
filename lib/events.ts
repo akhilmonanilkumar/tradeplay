@@ -1,3 +1,5 @@
+import { wall } from "./tz.ts";
+
 /** Pure helpers for economic-event risk windows (shared by the calendar widget, guardrails and the coach). */
 export type EventLike = { title: string; at: string; impact: "High" | "Medium" | "Low" | "Holiday"; country: string };
 export type RiskWindow = { kind: "no-trade" | "caution"; from: number; to: number; event: EventLike };
@@ -23,12 +25,12 @@ export function activeWindow(windows: RiskWindow[], now = new Date()): RiskWindo
   return windows.find((w) => w.kind === "no-trade" && t >= w.from && t <= w.to) ?? windows.find((w) => t >= w.from && t <= w.to) ?? null;
 }
 
-/** IST "HH:MM" of high-impact USD events on an IST date — to drop into the day plan's news times. */
+/** Local "HH:MM" of high-impact events on a local date (trader's timezone) — for the day plan's news times. */
 export function newsTimesFor(events: EventLike[], istDate: string): string[] {
   const times = new Set<string>();
   for (const e of events) {
     if (e.impact !== "High") continue;
-    const ist = new Date(new Date(e.at).getTime() + 5.5 * 3600000);
+    const ist = wall(new Date(e.at));
     if (ist.toISOString().slice(0, 10) !== istDate) continue;
     times.add(ist.toISOString().slice(11, 16));
   }

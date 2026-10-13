@@ -1,4 +1,5 @@
 import { newsBlock, windowOpen, todayIST } from "./calc.ts";
+import { tzAbbr } from "./tz.ts";
 import { EMOTIONS, GATE_CHECKS, MISTAKES, type Account, type DayPlan, type Lesson, type Trade } from "./types.ts";
 
 const closedTime = (t: Trade) => new Date(t.closed_at ?? t.opened_at).getTime();
@@ -78,7 +79,7 @@ export function diagnoseTrade(t: Trade, ctx: DiagCtx = {}): Diagnosis {
   if (ctx.account && !windowOpen(ctx.account, opened, plan))
     causes.push({ code: "session", severity: "bad", text: "Entered outside the session window", rule: RULES.session });
   const news = newsBlock(plan, opened);
-  if (news) causes.push({ code: "news", severity: "bad", text: `Entered within 15 min of news at ${news} IST`, rule: RULES.news });
+  if (news) causes.push({ code: "news", severity: "bad", text: `Entered within 15 min of news at ${news} ${tzAbbr()}`, rule: RULES.news });
 
   const sameAcct = (ctx.trades ?? []).filter((x) => x.account_id === t.account_id && x.id !== t.id && x.status !== "cancelled");
   const prevLoss = sameAcct.find(

@@ -6,7 +6,7 @@ import { Badge, Chips } from "@/components/ui";
 import VoiceButton from "@/components/Voice";
 import { ActionChips, Markdown, Sparkle } from "@/components/coach-ui";
 import { diagnoseTrade } from "@/lib/analysis";
-import { askCoach, useCoachStatus, type CoachResult } from "@/lib/coach";
+import { askCoach, asList, asText, useCoachStatus, type CoachResult } from "@/lib/coach";
 import { fmtIST, todayIST } from "@/lib/calc";
 import { supabase } from "@/lib/supabase";
 import { ALL_FEELINGS, FEELINGS, MENTAL_KEYS, type CoachAction, type EmotionEntry, type Trade, type TradeStage } from "@/lib/types";
@@ -157,16 +157,16 @@ export function TradeDiagnosis({ trade }: { trade: Trade }) {
       {ai?.error && <p className="mt-2 text-sm text-down">{ai.error}</p>}
       {ai && !ai.error && (
         <div className="mt-3 space-y-2 border-t border-accent/20 pt-3 text-sm">
-          {ai.verdict && <p className="font-medium">{ai.verdict}</p>}
-          {!!ai.causes?.length && <ul className="list-disc space-y-0.5 pl-4">{ai.causes.map((c, i) => <li key={i}>{c}</li>)}</ul>}
-          {!!ai.keep?.length && <div><span className="text-up">Repeat:</span> {ai.keep.join(" · ")}</div>}
+          {ai.verdict && <p className="font-medium">{asText(ai.verdict)}</p>}
+          {asList(ai.causes).length > 0 && <ul className="list-disc space-y-0.5 pl-4">{asList(ai.causes).map((c, i) => <li key={i}>{c}</li>)}</ul>}
+          {asList(ai.keep).length > 0 && <div><span className="text-up">Repeat:</span> {asList(ai.keep).join(" · ")}</div>}
           <ActionChips actions={ai.actions} />
         </div>
       )}
-      {coachDb && (ai?.lesson || d.lesson) && (
+      {coachDb && ((ai?.lesson && typeof ai.lesson === "object" && typeof ai.lesson.rule === "string") || d.lesson) && (
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-raised px-3 py-2 text-sm">
-          <span className="flex-1">→ {(ai?.lesson ?? d.lesson)!.rule}</span>
-          <button className="btn-ghost h-8 min-h-0 text-xs" disabled={saved} onClick={() => saveLesson((ai?.lesson ?? d.lesson)!, ai?.lesson ? "ai" : "auto")}>
+          <span className="flex-1">→ {((ai?.lesson && typeof ai.lesson.rule === "string" ? ai.lesson : null) ?? d.lesson)!.rule}</span>
+          <button className="btn-ghost h-8 min-h-0 text-xs" disabled={saved} onClick={() => saveLesson(((ai?.lesson && typeof ai.lesson.rule === "string" ? ai.lesson : null) ?? d.lesson)!, ai?.lesson ? "ai" : "auto")}>
             {saved ? "✓ Lesson saved" : "Remember this lesson"}
           </button>
         </div>

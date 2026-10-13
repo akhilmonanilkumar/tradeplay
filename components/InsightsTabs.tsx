@@ -8,6 +8,7 @@ import { Bands, HBars, LineChart, PnlCalendar, Scatter, VBars } from "@/componen
 import { accountState, equityCurveR, fmtPct, fmtR, fmtUsd, stats, tierFor, todayIST, type Stats } from "@/lib/calc";
 import { applyWhatIf, durationVsR, drawdownR, edgeCombos, emotionStats, monteCarlo, rByGate, recurringCauses, rolling, sequencePatterns, streaks, type PatternRow, type WhatIf } from "@/lib/analysis";
 import { MENTAL_KEYS, type Trade } from "@/lib/types";
+import { tzAbbr, wall } from "@/lib/tz";
 
 const istDay = (iso: string) => todayIST(new Date(iso));
 const pf = (s: Stats) => (s.profitFactor == null ? "—" : s.profitFactor === Infinity ? "∞" : s.profitFactor.toFixed(2));
@@ -93,7 +94,7 @@ export function PerformanceTab({ rows, onPick }: { rows: Trade[]; onPick: (id: s
   const greenDays = dayVals.filter((v) => v > 0).length;
   const perAcct = accounts.map((a) => ({ a, s: stats(rows.filter((t) => t.account_id === a.id)) })).filter((x) => x.s.n);
   const wd = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d, i) => {
-    const xs = rows.filter((t) => (new Date(new Date(t.opened_at).getTime() + 5.5 * 3600000).getUTCDay() + 6) % 7 === i);
+    const xs = rows.filter((t) => (wall(new Date(t.opened_at)).getUTCDay() + 6) % 7 === i);
     return { key: d, value: xs.reduce((s, t) => s + Number(t.r_multiple), 0), sub: `${xs.length}` };
   });
 
@@ -115,7 +116,7 @@ export function PerformanceTab({ rows, onPick }: { rows: Trade[]; onPick: (id: s
           <LineChart points={roll.map((r) => ({ t: r.t, v: r.exp, note: `win ${Math.round(r.win * 100)}%` }))} startAtZero={false} color="accent" format={(v) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}R/t`} />
         </Card>
         <Card title="Average R by gate score — does A+ pay?"><VBars rows={byGate} /></Card>
-        <Card title="Total R by weekday (IST)"><VBars rows={wd} /></Card>
+        <Card title={`Total R by weekday (${tzAbbr()})`}><VBars rows={wd} /></Card>
         <Card title="Holding time vs result" className="lg:col-span-2">
           <Scatter points={durationVsR(rows)} xLabel={(m) => (m >= 120 ? `${(m / 60).toFixed(1)}h` : `${Math.round(m)}m`)} onPick={onPick} />
         </Card>

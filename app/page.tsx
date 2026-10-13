@@ -6,6 +6,7 @@ import { useData } from "@/components/Shell";
 import { Badge, Card, Meter, Stat } from "@/components/ui";
 import TradeModal from "@/components/TradeModal";
 import { CheckinCard, DontRepeat, OutlookCard } from "@/components/TodayWidgets";
+import { tzAbbr } from "@/lib/tz";
 import { DailyPnl, Greeting, NextEventCard, OverallScore, PnlCurve, ScorePanel, StartDay, StatusCard, TodoList, TradesTable } from "@/components/TodayDash";
 import { EconWeek, MarketPanel, useMarket } from "@/components/Market";
 import {
@@ -131,7 +132,7 @@ export default function Today() {
                     Pre-market plan not done for today <span>→</span>
                   </Link>
                 )}
-                {news && <div className="rounded-lg border border-down/30 bg-down/5 px-3 py-2 text-down">News block: {news} IST ±15 min</div>}
+                {news && <div className="rounded-lg border border-down/30 bg-down/5 px-3 py-2 text-down">News block: {news} {tzAbbr()} ±15 min</div>}
                 {s.reasons.map((r) => (
                   <div key={r} className="rounded-lg border border-line px-3 py-2 text-mute">{r}</div>
                 ))}

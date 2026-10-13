@@ -1,7 +1,7 @@
 import "server-only";
 import { PLAYBOOK } from "./playbook";
 
-export const TASKS = ["chat", "brief", "outlook", "precheck", "manage", "analyze", "parse", "review"] as const;
+export const TASKS = ["chat", "brief", "outlook", "precheck", "manage", "analyze", "parse", "review", "ping"] as const;
 export type Task = (typeof TASKS)[number];
 
 export const SYSTEM = `You are "A+ Coach", the single assistant inside A+ TradePlay — the private trading journal of one funded daytrader who trades only XAUUSD (FundedHive 25K) and BTCUSDT.P (Breakout 5K funded), based in India (all times IST).
@@ -29,6 +29,8 @@ const ACTIONS = `"actions": [ /* zero or more action objects */ ]`;
 
 export function taskInstructions(task: Task, extra: Record<string, unknown> = {}): { prompt: string; json: boolean; maxTokens: number } {
   switch (task) {
+    case "ping":
+      return { json: false, maxTokens: 20, prompt: "Reply with exactly the word: OK" };
     case "chat":
       return {
         json: true,

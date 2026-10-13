@@ -12,7 +12,8 @@ import {
   accountState, feeShare, fmtUsd, levelsValid, newsBlock, positionSize, roundSize, rr, sessionAt, todayIST, windowOpen, windowLabel,
 } from "@/lib/calc";
 import { matchLessons, parseDictation } from "@/lib/analysis";
-import { askCoach, resolveAccount, useCoachStatus, type CoachResult } from "@/lib/coach";
+import { tzAbbr } from "@/lib/tz";
+import { askCoach, asList, asText, resolveAccount, useCoachStatus, type CoachResult } from "@/lib/coach";
 import { ALL_FEELINGS, ENTRY_MODELS, FEELINGS, GATE_CHECKS, MENTAL_KEYS, POI_TYPES, SESSIONS, type CoachAction, type GateKey, type MentalState } from "@/lib/types";
 
 type Precheck = CoachResult & { verdict?: "GO" | "WAIT" | "NO"; summary?: string; checks?: { ok: boolean | null; text: string }[]; manage?: string[]; lessons?: string[]; actions?: CoachAction[] };
@@ -133,7 +134,7 @@ export default function NewTrade() {
   const breaches = useMemo(() => {
     const out: string[] = [];
     if (!backfill && state && !state.canTrade) out.push(...state.reasons);
-    if (!backfill && news) out.push(`News block (${news} IST)`);
+    if (!backfill && news) out.push(`News block (${news} ${tzAbbr()})`);
     if (plan?.bias && plan.bias !== "neutral" && plan.bias !== direction) out.push(`Against today's ${plan.bias} bias`);
     if (plan?.bias === "neutral") out.push("Plan says stand aside today");
     if (risk > planned * 1.05 && planned > 0) out.push(`Risk ${fmtUsd(risk)} above plan ${fmtUsd(planned)}`);
@@ -343,12 +344,12 @@ export default function NewTrade() {
             {check && !check.error && (
               <div className="mt-3 space-y-2 text-sm">
                 <div className="flex items-center gap-2">
-                  <Badge tone={check.verdict === "GO" ? "up" : check.verdict === "WAIT" ? "warn" : "down"}>{check.verdict ?? "—"}</Badge>
-                  <span>{check.summary}</span>
+                  <Badge tone={check.verdict === "GO" ? "up" : check.verdict === "WAIT" ? "warn" : "down"}>{asText(check.verdict) || "—"}</Badge>
+                  <span>{asText(check.summary)}</span>
                 </div>
-                <ul className="space-y-1">{(check.checks ?? []).map((c, i) => <li key={i} className="flex gap-2"><span className={c.ok ? "text-up" : c.ok === false ? "text-down" : "text-warn"}>{c.ok ? "✓" : c.ok === false ? "✕" : "!"}</span><span>{c.text}</span></li>)}</ul>
-                {!!check.manage?.length && <div><div className="label mb-1">Management plan</div><ul className="list-disc space-y-0.5 pl-4">{check.manage.map((m, i) => <li key={i}>{m}</li>)}</ul></div>}
-                {!!check.lessons?.length && <div className="text-xs text-accent">{check.lessons.map((l, i) => <div key={i}>⟲ {l}</div>)}</div>}
+                <ul className="space-y-1">{(Array.isArray(check.checks) ? check.checks : []).map((c) => (typeof c === "string" ? { ok: null, text: c } : { ok: typeof c?.ok === "boolean" ? c.ok : null, text: asText(c?.text) })).map((c, i) => <li key={i} className="flex gap-2"><span className={c.ok ? "text-up" : c.ok === false ? "text-down" : "text-warn"}>{c.ok ? "✓" : c.ok === false ? "✕" : "!"}</span><span>{c.text}</span></li>)}</ul>
+                {asList(check.manage).length > 0 && <div><div className="label mb-1">Management plan</div><ul className="list-disc space-y-0.5 pl-4">{asList(check.manage).map((m, i) => <li key={i}>{m}</li>)}</ul></div>}
+                {asList(check.lessons).length > 0 && <div className="text-xs text-accent">{asList(check.lessons).map((l, i) => <div key={i}>⟲ {l}</div>)}</div>}
                 {typeof check.reply === "string" && !check.checks && <Markdown text={check.reply} />}
                 <ActionChips actions={check.actions} />
               </div>

@@ -6,6 +6,7 @@ import { useData } from "@/components/Shell";
 import { Badge, Empty, PageHead, Segmented } from "@/components/ui";
 import TradeModal from "@/components/TradeModal";
 import { fmtIST, fmtR, fmtUsd, toCsv } from "@/lib/calc";
+import { getTimeZone, tzAbbr } from "@/lib/tz";
 import type { Trade } from "@/lib/types";
 
 type StatusF = "all" | "open" | "closed" | "cancelled";
@@ -73,7 +74,7 @@ export default function Trades() {
   const groups = (() => {
     const m = new Map<string, Trade[]>();
     for (const t of rows) {
-      const k = new Date(t.opened_at).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+      const k = new Date(t.opened_at).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: getTimeZone() });
       m.set(k, [...(m.get(k) ?? []), t]);
     }
     return [...m.entries()];
@@ -147,7 +148,7 @@ export default function Trades() {
           <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="border-b border-line text-left">
-                {["Opened (IST)", "Instrument", "Setup", "Gate", "R:R", "Risk", "Net", "R", "Tags"].map((h) => (
+                {[`Opened (${tzAbbr()})`, "Instrument", "Setup", "Gate", "R:R", "Risk", "Net", "R", "Tags"].map((h) => (
                   <th key={h} className="label px-3 py-2.5 font-medium">{h}</th>
                 ))}
               </tr>

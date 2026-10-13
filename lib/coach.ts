@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import type { Account, CoachAction } from "./types";
 import { todayIST } from "./calc";
+import { getTimeZone } from "./tz";
 
 export async function authedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const { data } = await supabase.auth.getSession();
@@ -50,8 +51,27 @@ export function setPreferredModel(id: string) {
 
 export type CoachResult = Record<string, unknown> & { reply?: string; actions?: CoachAction[]; error?: string; setup?: boolean; model?: string; thread_id?: string; cached?: boolean };
 
+/* ---------- defensive parsing: models don't always follow the JSON shape ---------- */
+
+export const asText = (x: unknown): string => (typeof x === "string" ? x : x == null ? "" : typeof x === "number" || typeof x === "boolean" ? String(x) : JSON.stringify(x));
+export function asList(x: unknown): string[] {
+  if (Array.isArray(x))
+    return x
+      .map((v) => (typeof v === "string" ? v : v && typeof v === "object" ? Object.values(v as Record<string, unknown>).filter((s) => typeof s === "string").join(" — ") : asText(v)))
+      .filter((v) => v.trim());
+  return typeof x === "string" && x.trim() ? [x] : [];
+}
+const ACTION_TYPES = new Set(["save_plan", "add_reminder", "remember", "add_lesson", "draft_trade"]);
+export function asActions(x: unknown): CoachAction[] {
+  if (!Array.isArray(x)) return [];
+  return x.filter((a): a is CoachAction => !!a && typeof a === "object" && ACTION_TYPES.has((a as { type?: string }).type ?? "")).slice(0, 6);
+}
+export function asObjects<T extends object>(x: unknown): T[] {
+  return Array.isArray(x) ? (x.filter((v) => v && typeof v === "object" && !Array.isArray(v)) as T[]) : [];
+}
+
 export async function askCoach(
-  task: "chat" | "brief" | "outlook" | "precheck" | "manage" | "analyze" | "parse" | "review",
+  task: "chat" | "brief" | "outlook" | "precheck" | "manage" | "analyze" | "parse" | "review" | "ping",
   opts: { message?: string; thread_id?: string | null; payload?: Record<string, unknown>; research?: boolean; refresh?: boolean } = {},
 ): Promise<CoachResult> {
   try {
@@ -61,7 +81,9 @@ export async function askCoach(
       body: JSON.stringify({ task, model: preferredModel(), ...opts }),
     });
     const j = (await r.json().catch(() => ({}))) as CoachResult;
-    if (!r.ok) return { ...j, error: j.error ?? `Coach unavailable (${r.status})` };
+    if (!r.ok) return { ...j, error: asText(j.error) || `Coach unavailable (${r.status})` };
+    if (j.reply !== undefined) j.reply = asText(j.reply);
+    j.actions = asActions(j.actions);
     return j;
   } catch (e) {
     return { error: (e as Error).message };
@@ -84,7 +106,7 @@ export function resolveAccount(accounts: Account[], ref?: string | null): Accoun
 export function describeAction(a: CoachAction): string {
   switch (a.type) {
     case "save_plan": return `Save to today's plan${a.account ? ` (${a.account})` : ""}: ${Object.keys(a.fields ?? {}).join(", ")}`;
-    case "add_reminder": return `Remind me ${new Date(a.due_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}: ${a.text}`;
+    case "add_reminder": return `Remind me ${new Date(a.due_at).toLocaleString("en-IN", { timeZone: getTimeZone(), hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}: ${a.text}`;
     case "remember": return `Remember: ${a.content}`;
     case "add_lesson": return `Save lesson: ${a.title}`;
     case "draft_trade": return "Open as a new trade draft";

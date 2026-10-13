@@ -63,6 +63,16 @@ export async function POST(req: Request) {
   const now = new Date();
   const today = todayIST(now);
 
+  if (task === "ping") {
+    const t0 = Date.now();
+    try {
+      const out = await complete({ model, system: "You are a connectivity check.", messages: [{ role: "user", content: "Reply with exactly the word: OK" }], maxTokens: 20 });
+      return json({ ok: true, model: model.id, reply: out.slice(0, 80), ms: Date.now() - t0 });
+    } catch (e) {
+      return json({ ok: false, model: model.id, error: (e as Error).message.slice(0, 300) }, 200);
+    }
+  }
+
   // Cached daily outputs
   if ((task === "outlook" || task === "brief") && !body.refresh) {
     const { data } = await sb.from("daily_briefs").select("content, model, created_at").eq("brief_date", today).eq("kind", task).maybeSingle();

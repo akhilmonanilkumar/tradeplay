@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { todayIST, windowLabel, sessionAt } from "@/lib/calc";
 import { parseDictation } from "@/lib/analysis";
 import { newsTimesFor } from "@/lib/events";
+import { tzAbbr } from "@/lib/tz";
 import { askCoach, resolveAccount, useCoachStatus } from "@/lib/coach";
 import { PREMARKET, SESSION_CHOICES, type DayPlan, type SessionName } from "@/lib/types";
 
@@ -77,7 +78,7 @@ export default function Plan() {
 
   function addNews() {
     const v = newsInput.trim();
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(v)) return setErr("Use 24h HH:MM in IST, e.g. 18:00");
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(v)) return setErr(`Use 24h HH:MM in ${tzAbbr()}, e.g. 18:00`);
     setErr("");
     if (!draft!.news_times.includes(v)) set("news_times", [...draft!.news_times, v].sort());
     setNewsInput("");
@@ -192,7 +193,7 @@ export default function Plan() {
                 <Chips options={SESSION_CHOICES} value={sessions} onChange={(v) => set("sessions", v as SessionName[])} />
                 {sessions.includes("Custom") && (
                   <div className="mt-2 flex items-center gap-2 text-sm">
-                    <span className="text-mute">IST</span>
+                    <span className="text-mute">{tzAbbr()}</span>
                     <input type="time" className="input num w-auto" value={cwFrom || ""} onChange={(e) => set("custom_window", `${e.target.value}-${cwTo || ""}`)} aria-label="Custom window start (IST)" />
                     <span className="text-mute">to</span>
                     <input type="time" className="input num w-auto" value={cwTo || ""} onChange={(e) => set("custom_window", `${cwFrom || ""}-${e.target.value}`)} aria-label="Custom window end (IST)" />
@@ -200,7 +201,7 @@ export default function Plan() {
                 )}
               </Field>
             )}
-            <Field label="High-impact news today (IST)">
+            <Field label={`High-impact news today (${tzAbbr()})`}>
               <div className="flex gap-2">
                 <input className="input num w-28" placeholder="18:00" value={newsInput} onChange={(e) => setNewsInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addNews())} />
                 <button type="button" className="btn-ghost" onClick={addNews}>Add</button>

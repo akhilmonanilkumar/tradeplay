@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui";
-import { authedFetch, preferredModel, setPreferredModel, useCoachStatus } from "@/lib/coach";
+import { askCoach, authedFetch, preferredModel, setPreferredModel, useCoachStatus } from "@/lib/coach";
 
 type Preset = { slug: string; label: string; note: string };
 type OrModel = { id: string; name: string; context: number; free: boolean; tools: boolean; json: boolean; promptPerM: number; completionPerM: number };
@@ -18,6 +18,12 @@ export default function EnginePanel() {
   const [current, setCurrent] = useState<string | undefined>(undefined);
   const [q, setQ] = useState("");
   const [freeOnly, setFreeOnly] = useState(true);
+  const [test, setTest] = useState<{ busy?: boolean; ok?: boolean; text?: string } | null>(null);
+  const runTest = async () => {
+    setTest({ busy: true });
+    const r = await askCoach("ping");
+    setTest(r.ok ? { ok: true, text: `${String(r.model ?? "").replace(/^\w+:/, "")} answered in ${r.ms} ms` } : { ok: false, text: String(r.error ?? "No response") });
+  };
 
   useEffect(() => {
     setCurrent(preferredModel());
@@ -53,6 +59,16 @@ export default function EnginePanel() {
             </li>
           ))}
         </ul>
+      </div>
+
+      <div className="rounded-2xl border border-line p-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-semibold">Test the coach</span>
+          <button className="btn-ghost h-8 min-h-0 text-xs" onClick={runTest} disabled={test?.busy || !status?.enabled}>{test?.busy ? "Testing…" : "Run test"}</button>
+        </div>
+        <p className={`mt-1.5 text-xs ${test?.ok ? "text-up" : test?.ok === false ? "text-down" : "text-mute"}`}>
+          {test?.text ?? (status?.enabled ? "Sends a one-word request to the selected model." : "No AI provider configured on the server.")}
+        </p>
       </div>
 
       <div className="rounded-2xl border border-line p-3">

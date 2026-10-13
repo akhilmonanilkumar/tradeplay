@@ -5,6 +5,7 @@ import { useData } from "@/components/Shell";
 import { Badge, Card, Empty, PageHead, Segmented, Stat } from "@/components/ui";
 import { HBars, Heatmap, Histogram, LineChart, PnlCalendar } from "@/components/Charts";
 import TradeModal from "@/components/TradeModal";
+import { tzAbbr, wall } from "@/lib/tz";
 import { CalendarTab, EmotionsTab, PatternsTab, PerformanceTab, ToolsTab } from "@/components/InsightsTabs";
 import { equityCurveR, fmtIST, fmtPct, fmtR, fmtUsd, groupStats, stats, type Stats } from "@/lib/calc";
 import { GATE_CHECKS, type Trade } from "@/lib/types";
@@ -21,7 +22,7 @@ type Drill = { dim: Dim; key: string };
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SESSIONS = ["Asia", "London", "New York", "Off-session"];
 
-const istDate = (iso: string) => new Date(new Date(iso).getTime() + 5.5 * 3600 * 1000);
+const istDate = (iso: string) => wall(new Date(iso));
 const weekday = (t: Trade) => WEEKDAYS[(istDate(t.opened_at).getUTCDay() + 6) % 7];
 const hourIST = (t: Trade) => `${String(istDate(t.opened_at).getUTCHours()).padStart(2, "0")}:00`;
 const pf = (s: Stats) => (s.profitFactor == null ? "—" : s.profitFactor === Infinity ? "∞" : s.profitFactor.toFixed(2));
@@ -252,7 +253,7 @@ export default function Analytics() {
             <Card title="Daily P&L">
               <PnlCalendar days={calendar} month={month} onMonth={setMonth} onPick={setDay} />
             </Card>
-            <Card title="Entry hour (IST)">
+            <Card title={`Entry hour (${tzAbbr()})`}>
               <HBars rows={bars("hour").sort((a, b) => a.key.localeCompare(b.key))} active={activeKey("hour")} onPick={(k) => toggle("hour", k)} />
             </Card>
             <Card title="Cost of mistakes">
