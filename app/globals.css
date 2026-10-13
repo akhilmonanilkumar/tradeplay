@@ -214,3 +214,26 @@
 
 @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgb(var(--down) / 0.5); } 100% { box-shadow: 0 0 0 10px rgb(var(--down) / 0); } }
 @utility recording { animation: pulse-ring 1.2s ease-out infinite; }
+
+/* ---------------------------------------------------------------
+ * Touch / mobile ergonomics
+ * ------------------------------------------------------------- */
+html { -webkit-tap-highlight-color: transparent; }
+a, button, [role="button"], input, select, textarea, label, summary { touch-action: manipulation; }
+/* iOS zooms into inputs under 16px — keep form text at 16px on touch screens */
+@media (pointer: coarse) {
+  input, textarea, select { font-size: 16px !important; }
+}
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+/* Space reserved above the floating mobile nav */
+@utility pb-nav {
+  padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+}
+@keyframes sheet-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@utility sheet-in { animation: sheet-up 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

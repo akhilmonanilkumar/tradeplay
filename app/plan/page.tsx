@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useData } from "@/components/Shell";
-import { Card, Check, Chips, Field, PageHead, Segmented } from "@/components/ui";
+import { Card, Check, Chips, Field, MobileBar, PageHead, Segmented } from "@/components/ui";
 import VoiceButton from "@/components/Voice";
 import { useMarket } from "@/components/Market";
 import { supabase } from "@/lib/supabase";
@@ -228,6 +228,14 @@ export default function Plan() {
           </div>
         </Card>
       </div>
+      <MobileBar>
+        <div className="min-w-0 flex-1 text-xs leading-tight">
+          <div className="truncate text-sm font-semibold">{acct?.instrument ?? ""} · {done}/{PREMARKET.length} checklist</div>
+          <div className={saved === "error" ? "text-down" : "text-mute"}>{saved === "saved" ? "Saved" : saved === "saving" ? "Saving…" : saved === "error" ? "Not saved" : existing ? "Tap save after editing" : "Not saved yet"}</div>
+        </div>
+        <VoiceButton size="sm" label="Dictate" onInterim={setHeard} onText={fromVoice} />
+        <button className="btn-primary h-11 min-h-0 px-5" onClick={save} disabled={saved === "saving"}>Save</button>
+      </MobileBar>
     </>
   );
 }

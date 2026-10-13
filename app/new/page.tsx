@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useData } from "@/components/Shell";
-import { Badge, Card, Check, Chips, Field, PageHead, Segmented, numOrNull } from "@/components/ui";
+import { Badge, Card, Check, Chips, Field, MobileBar, PageHead, Segmented, numOrNull } from "@/components/ui";
 import VoiceButton from "@/components/Voice";
 import { ActionChips, Markdown, Sparkle } from "@/components/coach-ui";
 import { supabase } from "@/lib/supabase";
@@ -165,6 +165,7 @@ export default function NewTrade() {
     })) as Precheck;
     setCheck(r);
     setChecking(false);
+    document.getElementById("coach-check")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   const canSave = valid && risk > 0 && (breaches.length === 0 || (override && reason.trim().length >= 10));
@@ -229,11 +230,11 @@ export default function NewTrade() {
       <div className="grid gap-4 lg:grid-cols-5">
         <div className="space-y-4 lg:col-span-3">
           <Card title="Setup">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-3">
               <Field label="Direction">
                 <Segmented value={direction} onChange={setDirection} options={[{ value: "long", label: "Long" }, { value: "short", label: "Short" }]} />
                 {plan?.bias && plan.bias !== "neutral" && (
-                  <span className={`ml-2 text-xs ${plan.bias === direction ? "text-up" : "text-down"}`}>Plan: {plan.bias}</span>
+                  <span className={`mt-1 block text-xs ${plan.bias === direction ? "text-up" : "text-down"}`}>Plan: {plan.bias}</span>
                 )}
               </Field>
               <Field label="Session">
@@ -259,29 +260,29 @@ export default function NewTrade() {
                   {POI_TYPES.map((x) => <option key={x}>{x}</option>)}
                 </select>
               </Field>
-              <Field label="Opened at">
+              <div className="col-span-2 sm:col-span-1"><Field label="Opened at">
                 <input type="datetime-local" className="input" value={openedAt} onChange={(ev) => setOpenedAt(ev.target.value)} />
-              </Field>
+              </Field></div>
             </div>
           </Card>
 
           <Card title="Levels & size">
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
               <Field label="Entry"><input className="input num" inputMode="decimal" value={entry} onChange={(ev) => setEntry(ev.target.value)} /></Field>
-              <Field label="Stop loss"><input className="input num" inputMode="decimal" value={sl} onChange={(ev) => setSl(ev.target.value)} /></Field>
-              <Field label="Take profit"><input className="input num" inputMode="decimal" value={tp} onChange={(ev) => setTp(ev.target.value)} /></Field>
+              <Field label="Stop"><input className="input num" inputMode="decimal" value={sl} onChange={(ev) => setSl(ev.target.value)} /></Field>
+              <Field label="Target"><input className="input num" inputMode="decimal" value={tp} onChange={(ev) => setTp(ev.target.value)} /></Field>
             </div>
             {entry && sl && tp && !valid && (
               <p className="mt-2 text-xs text-down">For a {direction}, SL must be {direction === "long" ? "below" : "above"} entry and TP {direction === "long" ? "above" : "below"}.</p>
             )}
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
               <Field label="Risk $" hint={`Plan: ${fmtUsd(planned)} (${state.riskPct}%)`}>
                 <input className="input num" inputMode="decimal" placeholder={planned.toFixed(2)} value={riskInput} onChange={(ev) => setRiskInput(ev.target.value)} />
               </Field>
               <Field label={/XAU/i.test(acct.instrument) ? "Lots" : "Quantity"} hint={valid ? `Calculated ${calcSize}` : "Enter levels"}>
                 <input className="input num" inputMode="decimal" placeholder={calcSize ? String(calcSize) : ""} value={sizeInput} onChange={(ev) => setSizeInput(ev.target.value)} />
               </Field>
-              <div className="rounded-lg border border-line p-3">
+              <div className="hidden rounded-xl border border-line p-3 sm:block">
                 <div className="label">R:R</div>
                 <div className={`num mt-1 text-2xl font-semibold ${!valid ? "text-mute" : rrOk ? "text-up" : "text-down"}`}>{valid ? `1:${ratio}` : "—"}</div>
                 <div className="text-[11px] text-mute">min 1:{minRr}{valid ? ` · reward ${fmtUsd(risk * ratio)}` : ""}</div>
@@ -320,7 +321,7 @@ export default function NewTrade() {
                       const bad = m.good === "high" ? n <= 2 : n >= 4;
                       return (
                         <button key={n} type="button" aria-label={`${m.label} ${n}`} aria-pressed={on} onClick={() => setMental((x) => ({ ...x, [m.key]: n }))}
-                          className={`num h-7 w-7 rounded-md border text-xs ${on ? (good ? "border-up bg-up/15 text-up" : bad ? "border-down bg-down/15 text-down" : "border-accent bg-accent/15") : "border-line text-mute hover:text-ink"}`}>{n}</button>
+                          className={`num h-9 w-9 rounded-lg border text-sm sm:h-7 sm:w-7 sm:rounded-md sm:text-xs ${on ? (good ? "border-up bg-up/15 text-up" : bad ? "border-down bg-down/15 text-down" : "border-accent bg-accent/15") : "border-line text-mute hover:text-ink"}`}>{n}</button>
                       );
                     })}
                   </div>
@@ -333,7 +334,7 @@ export default function NewTrade() {
         </div>
 
         <div className="space-y-4 lg:col-span-2">
-          <section className="coach p-4">
+          <section id="coach-check" className="coach scroll-mt-20 p-4">
             <div className="flex items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-sm font-semibold"><Sparkle className="h-4 w-4 text-chart" /> Coach check</h2>
               {coach?.enabled && <button className="btn-ghost h-8 min-h-0 text-xs" onClick={runCheck} disabled={checking || !valid}>{checking ? "Checking…" : check ? "Re-check" : "Check this trade"}</button>}
@@ -361,6 +362,7 @@ export default function NewTrade() {
             )}
           </section>
 
+          <div id="guardrails" className="scroll-mt-20" />
           <Card title="Guardrails" action={breaches.length ? <Badge tone="down">{breaches.length} issue{breaches.length > 1 ? "s" : ""}</Badge> : <Badge tone="up">All clear</Badge>}>
             <div className="num grid grid-cols-2 gap-3 text-sm">
               <div><div className="label">Equity</div>{fmtUsd(state.equity)}</div>
@@ -414,6 +416,30 @@ export default function NewTrade() {
           </Card>
         </div>
       </div>
+
+      <MobileBar>
+        <div className="num min-w-0 flex-1 text-xs leading-tight">
+          <div className={`text-base font-semibold ${!valid ? "text-mute" : rrOk ? "text-up" : "text-down"}`}>{valid ? `1:${ratio}` : "R:R —"}</div>
+          <div className="truncate text-mute">
+            {fmtUsd(risk)} · {valid ? calcSize || "—" : "size —"} · <span className={gateOk ? "text-up" : "text-warn"}>{gateScore}/8</span>
+            {breaches.length > 0 && <span className="text-down"> · {breaches.length} issue{breaches.length > 1 ? "s" : ""}</span>}
+          </div>
+        </div>
+        {coach?.enabled && (
+          <button className="btn-ghost h-11 min-h-0 px-3" onClick={runCheck} disabled={checking || !valid} aria-label="Coach check">
+            <Sparkle className="h-4 w-4 text-chart" />
+          </button>
+        )}
+        {breaches.length > 0 && !override ? (
+          <button className="btn-ghost h-11 min-h-0 px-4 text-down" onClick={() => document.getElementById("guardrails")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+            Why blocked?
+          </button>
+        ) : (
+          <button className={`h-11 min-h-0 px-4 ${breaches.length ? "btn-danger" : "btn-primary"}`} disabled={!canSave || busy} onClick={submit}>
+            {busy ? "Saving…" : breaches.length ? "Log off-plan" : "Log trade"}
+          </button>
+        )}
+      </MobileBar>
     </>
   );
 }

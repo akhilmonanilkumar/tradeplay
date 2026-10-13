@@ -85,7 +85,7 @@ const DAY = 86400000;
 
 /** Mon–Sun grid of this week's market-moving events with no-trade (±15m) and caution windows, in IST. */
 export function EconWeek({ market }: { market: ReturnType<typeof useMarket> }) {
-  const { accounts, plans, refresh, coachDb } = useData();
+  const { accounts, plans, refresh, coachDb, reminders } = useData();
   const [filter, setFilter] = useState<"high" | "all">("high");
   const [msg, setMsg] = useState<string | null>(null);
   const events = market.data?.events ?? [];
@@ -117,7 +117,10 @@ export function EconWeek({ market }: { market: ReturnType<typeof useMarket> }) {
   }
   async function remind() {
     for (const e of events.filter((x) => x.impact === "High" && new Date(x.at).getTime() - 20 * 60000 > Date.now() && new Date(x.at).getTime() - Date.now() < 7 * DAY)) {
-      await supabase.from("reminders").insert({ text: `${e.country} ${e.title} in 20 min — no entries ±15 min`, due_at: new Date(new Date(e.at).getTime() - 20 * 60000).toISOString(), source: "manual" });
+      const due = new Date(new Date(e.at).getTime() - 20 * 60000).toISOString();
+      const text = `${e.country} ${e.title} in 20 min — no entries ±15 min`;
+      if (reminders.some((r) => r.text === text && Math.abs(new Date(r.due_at).getTime() - new Date(due).getTime()) < 60000)) continue;
+      await supabase.from("reminders").insert({ text, due_at: due, source: "manual" });
     }
     setMsg("Reminders set 20 min before each high-impact event this week.");
     refresh();
@@ -133,7 +136,38 @@ export function EconWeek({ market }: { market: ReturnType<typeof useMarket> }) {
           {live.kind === "no-trade" ? "No-trade window now" : "Caution window now"} — {live.event.title} ({fmtIST(new Date(live.from), false)}–{fmtIST(new Date(live.to), false)})
         </div>
       )}
-      <div className="-mx-1 overflow-x-auto px-1">
+      {/* Phones: agenda list */}
+      <ul className="space-y-3 md:hidden">
+        {days.map((d) => {
+          const list = shown.filter((e) => istDate(e.at) === d && new Date(e.at).getTime() > now.getTime() - 2 * 3600000);
+          if (!list.length) return null;
+          return (
+            <li key={d}>
+              <div className={`mb-1.5 text-xs font-semibold ${d === today ? "text-accent" : "text-mute"}`}>
+                {d === today ? "Today" : new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" })}
+              </div>
+              <ul className="space-y-1.5">
+                {list.map((e) => {
+                  const w = windows.find((x) => x.event === e && x.kind === "no-trade") ?? windows.find((x) => x.event === e);
+                  return (
+                    <li key={e.title + e.at} className="flex items-center gap-3 rounded-2xl bg-raised px-3 py-2.5">
+                      <span className="num w-12 shrink-0 text-sm font-semibold">{fmtIST(e.at, false)}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm">{e.country} · {e.title}</span>
+                        {w && <span className={`num block text-xs ${w.kind === "no-trade" ? "text-down" : "text-warn"}`}>{w.kind === "no-trade" ? "No entries" : "Caution"} {fmtIST(new Date(w.from), false)}–{fmtIST(new Date(w.to), false)}</span>}
+                      </span>
+                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${e.impact === "High" ? "bg-down" : "bg-warn"}`} aria-label={`${e.impact} impact`} />
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          );
+        })}
+        {!shown.some((e) => new Date(e.at).getTime() > now.getTime() - 2 * 3600000) && <li className="text-sm text-mute">No more {filter === "high" ? "high-impact " : ""}events this week.</li>}
+      </ul>
+
+      <div className="-mx-1 hidden overflow-x-auto px-1 md:block">
         <div className="grid min-w-[640px] grid-cols-7 gap-1.5">
           {days.map((d) => {
             const list = shown.filter((e) => istDate(e.at) === d);
@@ -162,10 +196,10 @@ export function EconWeek({ market }: { market: ReturnType<typeof useMarket> }) {
         </div>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-mute">⛔ no entries · ⚠ caution (wait 30–60 min after high impact)</span>
-        <span className="flex-1" />
-        {todaysTimes.length > 0 && <button className="btn-ghost h-8 min-h-0 text-xs" onClick={addToPlans}>Block today's times in my plans</button>}
-        {coachDb && <button className="btn-ghost h-8 min-h-0 text-xs" onClick={remind}>Remind me before each</button>}
+        <span className="hidden text-mute md:inline">⛔ no entries · ⚠ caution (wait 30–60 min after high impact)</span>
+        <span className="hidden flex-1 md:block" />
+        {todaysTimes.length > 0 && <button className="btn-ghost h-10 min-h-0 flex-1 text-xs md:h-8 md:flex-none" onClick={addToPlans}>Block today's times</button>}
+        {coachDb && <button className="btn-ghost h-10 min-h-0 flex-1 text-xs md:h-8 md:flex-none" onClick={remind}>Remind me before each</button>}
       </div>
       {msg && <p className="mt-2 text-xs text-up">{msg}</p>}
       {!market.loading && !events.length && <p className="text-sm text-mute">Calendar unavailable right now.</p>}

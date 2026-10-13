@@ -162,6 +162,18 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
   useEffect(() => setMore(false), [pathname]);
+  // Coming back to the app (PWA / tab switch): reload data, at most once a minute.
+  useEffect(() => {
+    let last = Date.now();
+    const onVis = () => {
+      if (document.visibilityState === "visible" && Date.now() - last > 60000 && session) {
+        last = Date.now();
+        refresh();
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [refresh, session]);
 
   const todayPlan = useCallback(
     (accountId: string) => data?.plans.find((p) => p.account_id === accountId && p.plan_date === todayIST()) ?? null,
@@ -218,7 +230,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
           <div className="flex min-w-0 flex-1 flex-col">
             {/* Top bar */}
-            <header className="sticky top-0 z-20 flex items-center justify-between gap-3 bg-bg/85 px-4 py-3 backdrop-blur md:static md:bg-transparent md:px-2 md:py-1 md:backdrop-blur-none">
+            <header className="sticky top-0 z-20 flex items-center justify-between gap-3 bg-bg/85 px-4 pb-2.5 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-xl md:static md:bg-transparent md:px-2 md:py-1 md:backdrop-blur-none">
               <Link href="/" className="flex items-center gap-2 md:hidden">
                 <Logo className="h-8 w-8" />
                 <span className="text-[15px] font-semibold tracking-tight"><span className="text-accent">A+</span> TradePlay</span>
@@ -236,48 +248,95 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                   <Icon d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-4.3-4.3" />
                 </button>
                 <ReminderCenter compact />
-                <span className="md:hidden"><ThemeToggle compact /></span>
                 <ProfileButton name={name} email={session.user.email ?? ""} />
               </div>
             </header>
-            <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 pb-36 pt-3 sm:px-6 md:px-2 md:pb-28">{children}</main>
+            <main className="pb-nav mx-auto w-full max-w-[1400px] flex-1 px-4 pt-3 sm:px-6 md:px-2 md:pb-28">{children}</main>
           </div>
         </div>
       </div>
 
-      {pathname !== "/coach" && <AskBar />}
+      {pathname !== "/coach" && <AskBar hideOnPhone={["/new", "/plan", "/accounts"].some((p) => pathname.startsWith(p))} />}
+      <PullToRefresh onRefresh={refresh} />
 
       {/* Mobile bottom nav */}
       <nav className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-30 grid grid-cols-5 rounded-[22px] bg-rail px-1 shadow-2xl md:hidden" aria-label="Main">
         {NAV.filter((n) => MOBILE.includes(n.href)).map((n) => (
-          <Link key={n.href} href={n.href} className={`flex flex-col items-center gap-1 py-2.5 text-[10px] ${active(n.href) ? "text-white" : "text-[#9AA0AA]"}`}>
+          <Link key={n.href} href={n.href} aria-current={active(n.href) ? "page" : undefined} className={`flex min-h-[60px] flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition active:scale-95 ${active(n.href) ? "text-white" : "text-[#9AA0AA]"}`}>
             {n.href === "/new" ? (
-              <span className="grid h-7 w-7 place-items-center rounded-full bg-[#F2C14E] text-[#141518]"><Icon d={n.icon} className="h-4 w-4" /></span>
+              <span className="grid h-10 w-10 place-items-center rounded-full bg-[#F2C14E] text-[#141518] shadow-lg"><Icon d={n.icon} className="h-5 w-5" /></span>
             ) : (
-              <Icon d={n.icon} className="h-5 w-5" />
+              <span className={`grid h-8 w-12 place-items-center rounded-full transition ${active(n.href) ? "bg-white/15" : ""}`}><Icon d={n.icon} className="h-5 w-5" /></span>
             )}
-            {n.label.replace(" trade", "")}
+            {n.href !== "/new" && n.label}
           </Link>
         ))}
-        <button onClick={() => setMore((v) => !v)} className={`flex flex-col items-center gap-1 py-2.5 text-[10px] ${more ? "text-white" : "text-[#9AA0AA]"}`} aria-expanded={more}>
-          <Icon d="M4 6h16M4 12h16M4 18h16" className="h-5 w-5" />
+        <button onClick={() => setMore((v) => !v)} className={`flex min-h-[60px] flex-col items-center justify-center gap-0.5 text-[10px] font-medium active:scale-95 ${more || NAV.some((n) => !MOBILE.includes(n.href) && active(n.href)) ? "text-white" : "text-[#9AA0AA]"}`} aria-expanded={more}>
+          <span className={`grid h-8 w-12 place-items-center rounded-full ${more ? "bg-white/15" : ""}`}><Icon d="M4 6h16M4 12h16M4 18h16" className="h-5 w-5" /></span>
           More
         </button>
       </nav>
+      {more && <div className="fixed inset-0 z-20 md:hidden" onClick={() => setMore(false)} aria-hidden />}
       {more && (
-        <div className="fixed inset-x-3 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 card p-2 shadow-2xl md:hidden">
+        <div className="sheet-in fixed inset-x-3 bottom-[calc(5.4rem+env(safe-area-inset-bottom))] z-30 card grid grid-cols-2 gap-1 p-2 shadow-2xl md:hidden">
           {NAV.filter((n) => !MOBILE.includes(n.href)).map((n) => (
-            <Link key={n.href} href={n.href} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm hover:bg-raised">
+            <Link key={n.href} href={n.href} className={`flex items-center gap-3 rounded-xl px-3 py-3.5 text-sm hover:bg-raised ${active(n.href) ? "bg-raised font-medium" : ""}`}>
               <Icon d={n.icon} /> {n.label}
             </Link>
           ))}
-          <button onClick={() => supabase.auth.signOut()} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-mute hover:bg-raised">
+          <div className="col-span-2 px-0.5 [&>button]:py-3"><ThemeToggle /></div>
+          <button onClick={() => supabase.auth.signOut()} className="col-span-2 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-mute hover:bg-raised">
             <Icon d="M15 4h4v16h-4M10 17l5-5-5-5M15 12H3" /> Sign out
           </button>
         </div>
       )}
       <CommandPalette open={palette} onClose={() => setPalette(false)} go={(href) => { setPalette(false); router.push(href); }} />
     </Ctx.Provider>
+  );
+}
+
+/** Pull down at the top of the page to reload (touch screens). */
+function PullToRefresh({ onRefresh }: { onRefresh: () => Promise<void> }) {
+  const [pull, setPull] = useState(0);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let y0: number | null = null;
+    let dist = 0;
+    const start = (e: TouchEvent) => {
+      y0 = window.scrollY <= 0 && !document.body.style.overflow ? e.touches[0].clientY : null;
+      dist = 0;
+    };
+    const move = (e: TouchEvent) => {
+      if (y0 == null) return;
+      dist = Math.max(0, e.touches[0].clientY - y0);
+      setPull(Math.min(110, dist * 0.5));
+    };
+    const end = async () => {
+      if (y0 != null && dist * 0.5 > 70) {
+        setBusy(true);
+        setPull(56);
+        await onRefresh();
+        setBusy(false);
+      }
+      y0 = null;
+      setPull(0);
+    };
+    window.addEventListener("touchstart", start, { passive: true });
+    window.addEventListener("touchmove", move, { passive: true });
+    window.addEventListener("touchend", end);
+    return () => {
+      window.removeEventListener("touchstart", start);
+      window.removeEventListener("touchmove", move);
+      window.removeEventListener("touchend", end);
+    };
+  }, [onRefresh]);
+  if (!pull && !busy) return null;
+  return (
+    <div className="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-center md:hidden" style={{ transform: `translateY(${pull}px)` }}>
+      <span className={`mt-2 grid h-9 w-9 place-items-center rounded-full bg-panel shadow-lg ${busy ? "animate-spin" : ""}`} style={{ transform: busy ? undefined : `rotate(${pull * 3}deg)` }}>
+        <Icon d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5" className={`h-4 w-4 ${pull > 70 || busy ? "text-chart" : "text-mute"}`} />
+      </span>
+    </div>
   );
 }
 

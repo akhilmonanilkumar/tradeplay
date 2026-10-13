@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function Card({ title, action, children, className = "" }: { title?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
@@ -51,13 +51,13 @@ export function Meter({ value, tone = "mute", label }: { value: number; tone?: "
 
 export function Segmented<T extends string>({ value, options, onChange, size = "sm" }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; size?: "sm" | "xs" }) {
   return (
-    <div className="inline-flex rounded-lg border border-line p-0.5">
+    <div className="inline-flex shrink-0 rounded-lg border border-line p-0.5">
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
-          className={`rounded-md ${size === "xs" ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs"} transition ${value === o.value ? "bg-ink text-bg" : "text-mute hover:text-ink"}`}
+          className={`shrink-0 whitespace-nowrap rounded-md ${size === "xs" ? "px-2.5 py-1.5 text-[11px] sm:px-2 sm:py-0.5" : "px-3 py-2 text-xs sm:px-2.5 sm:py-1"} transition ${value === o.value ? "bg-ink text-bg" : "text-mute hover:text-ink"}`}
         >
           {o.label}
         </button>
@@ -108,7 +108,7 @@ export function Chips({ options, value, onChange }: { options: string[]; value: 
             key={o}
             type="button"
             onClick={() => onChange(on ? value.filter((x) => x !== o) : [...value, o])}
-            className={`rounded-full border px-2.5 py-1 text-xs transition ${on ? "border-ink bg-ink text-bg" : "border-line text-mute hover:text-ink"}`}
+            className={`rounded-full border px-3 py-1.5 text-xs transition sm:px-2.5 sm:py-1 ${on ? "border-ink bg-ink text-bg" : "border-line text-mute hover:text-ink"}`}
           >
             {o}
           </button>
@@ -118,27 +118,56 @@ export function Chips({ options, value, onChange }: { options: string[]; value: 
   );
 }
 
-export function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
+export function Modal({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; footer?: React.ReactNode }) {
+  const [drag, setDrag] = useState(0);
+  const startY = useRef<number | null>(null);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      document.body.style.overflow = prev;
     };
   }, [open, onClose]);
+  useEffect(() => setDrag(0), [open]);
   if (!open) return null;
+  // Swipe the handle/header down to dismiss on phones.
+  const onStart = (e: React.TouchEvent) => (startY.current = e.touches[0].clientY);
+  const onMove = (e: React.TouchEvent) => startY.current != null && setDrag(Math.max(0, e.touches[0].clientY - startY.current));
+  const onEnd = () => {
+    if (drag > 90) onClose();
+    else setDrag(0);
+    startY.current = null;
+  };
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm p-0 sm:items-center sm:p-4" onClick={onClose} role="dialog" aria-modal aria-label={title}>
-      <div className="card max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-b-none p-5 shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold">{title}</h2>
-          <button onClick={onClose} className="text-mute hover:text-ink" aria-label="Close">✕</button>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose} role="dialog" aria-modal aria-label={title}>
+      <div
+        className="card sheet-in flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-b-none shadow-2xl sm:max-h-[88vh] sm:rounded-[22px]"
+        style={drag ? { transform: `translateY(${drag}px)`, transition: "none" } : undefined}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="shrink-0 px-5 pb-3 pt-2 sm:pt-5" onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd}>
+          <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-line sm:hidden" aria-hidden />
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold">{title}</h2>
+            <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-raised text-mute hover:text-ink" aria-label="Close">✕</button>
+          </div>
         </div>
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5">{children}</div>
+        {footer && <div className="shrink-0 border-t border-line bg-panel px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">{footer}</div>}
       </div>
+    </div>
+  );
+}
+
+/** Phone-only action bar pinned above the bottom nav (forms: log, save). */
+export function MobileBar({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-x-3 bottom-[calc(5.4rem+env(safe-area-inset-bottom))] z-20 md:hidden">
+      <div className="card flex items-center gap-3 rounded-[20px] px-3 py-2.5 shadow-[0_8px_30px_rgb(0_0_0/0.25)]">{children}</div>
     </div>
   );
 }

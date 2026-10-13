@@ -152,7 +152,28 @@ export default function TradeModal({ trade, onClose }: { trade: Trade | null; on
   }
 
   return (
-    <Modal open={!!trade} onClose={onClose} title={`${trade.direction === "long" ? "Long" : "Short"} ${trade.instrument} · ${fmtIST(trade.opened_at)}`}>
+    <Modal
+      open={!!trade}
+      onClose={onClose}
+      title={`${trade.direction === "long" ? "Long" : "Short"} ${trade.instrument} · ${fmtIST(trade.opened_at)}`}
+      footer={
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex gap-2">
+                  <button className="btn text-down hover:bg-down/10" onClick={remove}>Delete</button>
+                  {trade.status === "open" && <button className="btn-ghost" onClick={() => setStatus("cancelled")}>Cancel order</button>}
+                  {trade.status !== "open" && <button className="btn-ghost" onClick={() => setStatus("open")}>Reopen</button>}
+                </div>
+                <div className="flex gap-2">
+                  <button className="btn-ghost" disabled={busy} onClick={() => save(false)}>Save notes</button>
+                  {trade.status !== "cancelled" && (
+                    <button className="btn-primary" disabled={busy} onClick={() => save(true)}>
+                      {trade.status === "closed" ? "Update result" : "Close trade"}
+                    </button>
+                  )}
+                </div>
+              </div>
+      }
+    >
       <div className="mb-4 flex flex-wrap gap-1.5">
         <Badge tone={trade.gate_score === 8 ? "up" : "warn"}>Gate {trade.gate_score}/8</Badge>
         <Badge>{acct?.name}</Badge>
@@ -177,12 +198,12 @@ export default function TradeModal({ trade, onClose }: { trade: Trade | null; on
 
       <div className="mb-4"><TradeDiagnosis key={trade.id + trade.status} trade={trade} /></div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <Field label="Exit price"><input className="input num" inputMode="decimal" value={exit} onChange={(e) => setExit(e.target.value)} /></Field>
-        <Field label="Realized P&L $" hint={suggested != null && !gross ? `≈ ${fmtUsd(suggested, true)} from exit` : "Use your platform's figure"}>
+        <Field label="P&L $" hint={suggested != null && !gross ? `≈ ${fmtUsd(suggested, true)}` : "platform figure"}>
           <input className="input num" inputMode="decimal" value={gross} onChange={(e) => setGross(e.target.value)} placeholder={suggested?.toFixed(2)} />
         </Field>
-        <Field label="Fees / commission $"><input className="input num" inputMode="decimal" value={fees} onChange={(e) => setFees(e.target.value)} /></Field>
+        <Field label="Fees $"><input className="input num" inputMode="decimal" value={fees} onChange={(e) => setFees(e.target.value)} /></Field>
       </div>
 
       <div className="mt-4 space-y-3">
@@ -225,21 +246,6 @@ export default function TradeModal({ trade, onClose }: { trade: Trade | null; on
 
       {err && <p className="mt-3 text-sm text-down">{err}</p>}
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-2">
-          <button className="btn text-down hover:bg-down/10" onClick={remove}>Delete</button>
-          {trade.status === "open" && <button className="btn-ghost" onClick={() => setStatus("cancelled")}>Cancel order</button>}
-          {trade.status !== "open" && <button className="btn-ghost" onClick={() => setStatus("open")}>Reopen</button>}
-        </div>
-        <div className="flex gap-2">
-          <button className="btn-ghost" disabled={busy} onClick={() => save(false)}>Save notes</button>
-          {trade.status !== "cancelled" && (
-            <button className="btn-primary" disabled={busy} onClick={() => save(true)}>
-              {trade.status === "closed" ? "Update result" : "Close trade"}
-            </button>
-          )}
-        </div>
-      </div>
     </Modal>
   );
 }

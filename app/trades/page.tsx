@@ -19,6 +19,7 @@ export default function Trades() {
   const [q, setQ] = useState("");
   const [edit, setEdit] = useState<Trade | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [shown, setShown] = useState(20);
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     const st = p.get("status");
@@ -69,6 +70,15 @@ export default function Trades() {
     URL.revokeObjectURL(url);
   }
 
+  const groups = (() => {
+    const m = new Map<string, Trade[]>();
+    for (const t of rows) {
+      const k = new Date(t.opened_at).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+      m.set(k, [...(m.get(k) ?? []), t]);
+    }
+    return [...m.entries()];
+  })();
+
   return (
     <>
       <PageHead
@@ -82,20 +92,58 @@ export default function Trades() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <input className="input mb-2 md:hidden" type="search" placeholder="Search notes, tags, setup…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="no-scrollbar -mx-4 mb-4 flex items-center gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:overflow-visible md:px-0">
         <Segmented value={status} onChange={setStatus} options={[{ value: "all", label: "All" }, { value: "open", label: "Open" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }]} />
         <Segmented value={gate} onChange={setGate} options={[{ value: "all", label: "Any" }, { value: "aplus", label: "A+ only" }, { value: "off", label: "Off-plan" }]} />
-        <select className="input w-auto" value={account} onChange={(e) => setAccount(e.target.value)}>
+        <select className="input w-auto shrink-0" value={account} onChange={(e) => setAccount(e.target.value)}>
           <option value="all">All accounts</option>
           {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
-        <input className="input w-full sm:w-56" placeholder="Search notes, tags, setup…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input hidden w-56 md:block" type="search" placeholder="Search notes, tags, setup…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       {rows.length === 0 ? (
         <Empty title="No trades here">Log your first A+ trade from <Link className="text-accent" href="/new">New</Link>.</Empty>
       ) : (
-        <div className="card overflow-x-auto">
+        <>
+        {/* Phones: card list grouped by day */}
+        <div className="space-y-4 md:hidden">
+          {groups.slice(0, shown).map(([day, ts]) => (
+            <section key={day}>
+              <div className="sticky top-[calc(3.6rem+env(safe-area-inset-top))] z-10 -mx-4 bg-bg/90 px-4 py-1.5 text-xs font-semibold text-mute backdrop-blur">
+                {day}
+                <span className="num float-right">{fmtUsd(ts.reduce((a, t) => a + Number(t.net_pnl ?? 0), 0), true)}</span>
+              </div>
+              <ul className="card divide-y divide-line overflow-hidden p-0">
+                {ts.map((t) => (
+                  <li key={t.id}>
+                    <button onClick={() => setEdit(t)} className="flex w-full items-center gap-3 px-4 py-3 text-left active:bg-raised">
+                      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[11px] font-bold ${t.direction === "long" ? "bg-up/12 text-up" : "bg-down/12 text-down"}`}>{t.direction === "long" ? "L" : "S"}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5 text-sm font-medium">
+                          {t.instrument}
+                          <Badge tone={t.gate_score === 8 && !t.override_reason ? "up" : "warn"}>{t.gate_score}/8</Badge>
+                          {t.status !== "closed" && <Badge>{t.status}</Badge>}
+                        </span>
+                        <span className="block truncate text-xs text-mute">
+                          {fmtIST(t.opened_at, false)} · {setups.find((x) => x.id === t.setup_id)?.name ?? t.entry_model ?? "—"}{t.mistakes.length ? ` · ${t.mistakes[0]}` : ""}
+                        </span>
+                      </span>
+                      <span className="text-right">
+                        <span className={`num block text-sm font-semibold ${t.r_multiple == null ? "text-mute" : t.r_multiple >= 0 ? "text-up" : "text-down"}`}>{t.r_multiple == null ? `1:${t.rr_planned ?? "—"}` : fmtR(t.r_multiple)}</span>
+                        <span className={`num block text-xs ${t.net_pnl == null ? "text-mute" : t.net_pnl >= 0 ? "text-up" : "text-down"}`}>{t.net_pnl == null ? fmtUsd(t.risk_usd) : fmtUsd(t.net_pnl, true)}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+          {groups.length > shown && <button className="btn-ghost w-full" onClick={() => setShown((n) => n + 20)}>Show more</button>}
+        </div>
+
+        <div className="card hidden overflow-x-auto md:block">
           <table className="w-full min-w-[760px] text-sm">
             <thead>
               <tr className="border-b border-line text-left">
@@ -127,7 +175,7 @@ export default function Trades() {
                       <span className="flex flex-wrap gap-1">
                         {t.override_reason && <Badge tone="down">override</Badge>}
                         {t.mistakes.slice(0, 2).map((m) => <Badge key={m}>{m}</Badge>)}
-                        {(t.before_path || t.after_path) && <Badge tone="accent">📷</Badge>}
+                        {(t.before_path || t.after_path) && <Badge tone="accent">shots</Badge>}
                       </span>
                     </td>
                   </tr>
@@ -136,6 +184,7 @@ export default function Trades() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       <TradeModal trade={edit} onClose={() => setEdit(null)} />

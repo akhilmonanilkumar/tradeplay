@@ -55,8 +55,14 @@ export default function Today() {
     <>
       <Greeting now={now} onStart={() => setStartDay(true)} />
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-5">
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px] xl:grid-rows-[auto_1fr]">
+        {/* Phones: what to do now comes first; desktop: right rail */}
+        <aside className="space-y-5 xl:col-start-2 xl:row-start-1">
+          <StatusCard now={now} />
+          <TodoList now={now} />
+          <NextEventCard events={market.data?.events ?? []} now={now} />
+        </aside>
+        <div className="space-y-5 xl:col-start-1 xl:row-span-2 xl:row-start-1">
           <div className="grid gap-5 lg:grid-cols-12">
             <div className="lg:col-span-4"><ScorePanel now={now} /></div>
             <div className="lg:col-span-8"><PnlCurve now={now} /></div>
@@ -142,10 +148,7 @@ export default function Today() {
           <MarketPanel market={market} />
         </div>
 
-        <aside className="space-y-5">
-          <StatusCard now={now} />
-          <TodoList now={now} />
-          <NextEventCard events={market.data?.events ?? []} now={now} />
+        <aside className="space-y-5 xl:col-start-2 xl:row-start-2">
           <CheckinCard now={now} />
           <DontRepeat />
           {breaksToday.length > 0 && (

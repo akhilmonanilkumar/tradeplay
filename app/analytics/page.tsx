@@ -141,7 +141,7 @@ export default function Analytics() {
         }
       />
 
-      <div className="-mx-1 mb-5 overflow-x-auto px-1">
+      <div className="no-scrollbar -mx-4 mb-5 overflow-x-auto px-4 md:mx-0 md:px-0">
         <div className="inline-flex gap-1 rounded-xl border border-line bg-panel p-1">
           {TABS.map((t) => (
             <button key={t.value} onClick={() => pickTab(t.value)} className={`rounded-lg px-3 py-1.5 text-sm transition ${tab === t.value ? "bg-raised font-medium text-ink" : "text-mute hover:text-ink"}`}>{t.label}</button>

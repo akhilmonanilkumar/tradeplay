@@ -43,3 +43,17 @@ Colours are stored as `R G B` CSS variables so Tailwind opacity modifiers work (
   - `aria-pressed` on toggles.
   - A focus ring in the accent colour.
   - Numbers carry +/− signs, so colour is never the only signal.
+
+## Mobile
+- **Navigation:** a floating bottom nav (Today · Plan · **+** · Coach · More), with 60 px tap targets and an active pill. "More" opens a sheet with the other pages, the theme and sign out.
+- **AI button:** a round purple button above the nav opens an "Ask the coach" sheet with quick prompts. It tucks away while you scroll down and comes back when you scroll up. It's hidden on form pages, where the action bar sits.
+- **Sheets:**
+  - Every dialog becomes a bottom sheet with a drag handle; swipe down to close.
+  - Action footers stay pinned to the bottom of the sheet (trade sheet: Save / Close trade).
+  - The Coach's chats, memory, knowledge and lessons open from ☰ as a sheet, so the chat gets the full width.
+- **Action bars:** sticky bars sit above the nav on New trade (R:R, risk, size, gate, issues, coach check, Log or "Why blocked?"), on Plan (checklist, Dictate, Save) and on Accounts (when you have unsaved edits).
+- **Today on phones:** the status card, to-do list and next news event come first, then scores and charts. The economic calendar becomes a day-by-day agenda, and chip rows scroll sideways.
+- **Trades:** cards grouped by day with sticky day headers and day totals, plus "Show more".
+- **Inputs:** text is 16 px on touch screens, so iOS doesn't zoom in. There's no double-tap delay or tap flash, and the layout respects safe areas (notch and home bar).
+- **Gestures:** pull down at the top of a page to refresh. Data also reloads when you return to the app after more than a minute.
+- **Motion:** reduced motion is respected.

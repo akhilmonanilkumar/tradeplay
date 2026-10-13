@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useData } from "@/components/Shell";
-import { Badge, Card, Field, Modal, PageHead, numOrNull } from "@/components/ui";
+import { Badge, Card, Field, MobileBar, Modal, PageHead, numOrNull } from "@/components/ui";
 import { accountState, fmtUsd } from "@/lib/calc";
 import { supabase } from "@/lib/supabase";
 import type { Account, Setup, Tier } from "@/lib/types";
@@ -170,7 +170,7 @@ function AccountEditor({ account }: { account: Account }) {
       {GROUPS.map((g) => (
         <div key={g.title} className="mt-5">
           <div className="label mb-2">{g.title}</div>
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {g.fields.map((f) => (
               <Field key={f.key} label={f.label} hint={f.hint}>
                 <input
@@ -210,6 +210,14 @@ function AccountEditor({ account }: { account: Account }) {
           <button className="btn-primary" onClick={save} disabled={state === "saving" || !dirty}>Save changes</button>
         </div>
       </div>
+
+      {dirty && (
+        <MobileBar>
+          <div className="min-w-0 flex-1 truncate text-sm font-semibold">{account.name}<span className="block text-xs font-normal text-accent">Unsaved changes</span></div>
+          <button className="btn-ghost h-11 min-h-0 px-3" onClick={() => { setA(account); setLadder(account.risk_ladder ?? []); }}>Discard</button>
+          <button className="btn-primary h-11 min-h-0 px-4" onClick={save} disabled={state === "saving"}>Save</button>
+        </MobileBar>
+      )}
 
       <Modal open={confirmDel} onClose={() => setConfirmDel(false)} title={`Delete “${account.name}”?`}>
         <p className="text-sm text-mute">

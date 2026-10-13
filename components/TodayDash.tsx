@@ -114,23 +114,23 @@ export function PnlCurve({ now }: { now: Date }) {
     { l: "This week", v: sum((d) => d >= week) },
     { l: "This month", v: sum((d) => d.startsWith(month)) },
   ];
-  const chip = (on: boolean) => `rounded-full px-3 py-1.5 text-xs transition ${on ? "bg-solid text-solid-ink" : "bg-raised text-mute hover:text-ink"}`;
+  const chip = (on: boolean) => `shrink-0 rounded-full px-3 py-1.5 text-xs transition ${on ? "bg-solid text-solid-ink" : "bg-raised text-mute hover:text-ink"}`;
   return (
     <div className="card flex h-full flex-col p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-[15px] font-semibold tracking-tight">Cumulative net P&amp;L</h2>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="no-scrollbar -mx-5 flex gap-1.5 overflow-x-auto px-5 sm:mx-0 sm:px-0">
           <button className={chip(acct === "all")} onClick={() => setAcct("all")}>All</button>
           {accounts.filter((a) => a.status === "active").map((a) => <button key={a.id} className={chip(acct === a.id)} onClick={() => setAcct(a.id)}>{a.instrument}</button>)}
           <span className="mx-1 w-px bg-line" />
           {(["30", "90", "all"] as const).map((r) => <button key={r} className={chip(range === r)} onClick={() => setRange(r)}>{r === "all" ? "All" : `${r}D`}</button>)}
         </div>
       </div>
-      <div className="mt-3 flex flex-wrap gap-x-8 gap-y-2">
+      <div className="mt-3 grid grid-cols-3 gap-2 sm:flex sm:gap-8">
         {figs.map((f) => (
           <div key={f.l}>
             <div className="text-xs text-mute">{f.l}</div>
-            <div className={`num text-lg font-semibold ${f.v > 0 ? "text-up" : f.v < 0 ? "text-down" : ""}`}>{fmtUsd(f.v, true)}</div>
+            <div className={`num text-[15px] font-semibold sm:text-lg ${f.v > 0 ? "text-up" : f.v < 0 ? "text-down" : ""}`}>{fmtUsd(f.v, true)}</div>
           </div>
         ))}
       </div>

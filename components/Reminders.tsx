@@ -86,7 +86,7 @@ export default function ReminderCenter({ compact = false }: { compact?: boolean 
         )}
       </button>
       {open && (
-        <div className="card absolute right-0 top-11 z-40 w-[min(92vw,380px)] p-2 shadow-2xl">
+        <div className="card fixed inset-x-3 top-[calc(4.25rem+env(safe-area-inset-top))] z-40 p-2 shadow-2xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-[380px]">
           {list.length === 0 && <p className="px-3 py-4 text-sm text-mute">Nothing pending. Patience is a position.</p>}
           <ul className="max-h-[60vh] overflow-y-auto">
             {list.map((n) => (

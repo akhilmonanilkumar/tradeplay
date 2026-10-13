@@ -167,7 +167,7 @@ function Scale({ label, value, onChange, lowGood = false }: { label: string; val
               key={n}
               type="button"
               onClick={() => onChange(n)}
-              className={`num h-8 w-8 rounded-lg border text-xs transition ${on ? (good ? "border-up bg-up/15 text-up" : bad ? "border-down bg-down/15 text-down" : "border-accent bg-accent/15 text-ink") : "border-line text-mute hover:text-ink"}`}
+              className={`num h-10 w-10 rounded-xl border text-sm transition sm:h-8 sm:w-8 sm:rounded-lg sm:text-xs ${on ? (good ? "border-up bg-up/15 text-up" : bad ? "border-down bg-down/15 text-down" : "border-accent bg-accent/15 text-ink") : "border-line text-mute hover:text-ink"}`}
               aria-pressed={on}
               aria-label={`${label} ${n} of 5`}
             >

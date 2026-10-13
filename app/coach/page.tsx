@@ -27,12 +27,13 @@ export default function CoachPage() {
   const [side, setSide] = useState<"threads" | "memory" | "knowledge" | "lessons">("threads");
   const [threadId, setThreadId] = useState<string | null>(null);
   const [threadsKey, setThreadsKey] = useState(0);
+  const [panel, setPanel] = useState(false);
 
   if (!coachDb) return <MigrationNotice />;
 
   return (
     <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
-      <aside className="card flex max-h-[calc(100vh-7rem)] min-h-0 flex-col overflow-hidden p-3 lg:sticky lg:top-4">
+      <aside className="card hidden max-h-[calc(100vh-7rem)] min-h-0 flex-col overflow-hidden p-3 lg:sticky lg:top-4 lg:flex">
         <Segmented
           size="xs"
           value={side}
@@ -46,10 +47,30 @@ export default function CoachPage() {
           {side === "lessons" && <LessonsPanel />}
         </div>
       </aside>
+      {panel && (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/50 backdrop-blur-sm lg:hidden" onClick={() => setPanel(false)}>
+          <div className="sheet-in flex max-h-[85dvh] w-full flex-col rounded-t-[26px] bg-panel p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" onClick={(e) => e.stopPropagation()}>
+            <div className="mx-auto mb-3 h-1.5 w-10 shrink-0 rounded-full bg-line" aria-hidden />
+        <Segmented
+          size="xs"
+          value={side}
+          onChange={setSide}
+          options={[{ value: "threads", label: "Chats" }, { value: "memory", label: "Memory" }, { value: "knowledge", label: "Knowledge" }, { value: "lessons", label: "Lessons" }]}
+        />
+        <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
+          {side === "threads" && <Threads key={threadsKey} current={threadId} onPick={(id) => { setThreadId(id); setPanel(false); }} />}
+          {side === "memory" && <MemoryPanel />}
+          {side === "knowledge" && <KnowledgePanel />}
+          {side === "lessons" && <LessonsPanel />}
+        </div>
+                </div>
+        </div>
+      )}
       <Chat
         key={threadId ?? "new"}
         threadId={threadId}
         status={status}
+        onPanel={() => setPanel(true)}
         onThread={(id) => {
           setThreadId(id);
           setThreadsKey((k) => k + 1);
@@ -61,7 +82,7 @@ export default function CoachPage() {
 
 /* ---------------- chat ---------------- */
 
-function Chat({ threadId, status, onThread }: { threadId: string | null; status: ReturnType<typeof useCoachStatus>; onThread: (id: string) => void }) {
+function Chat({ threadId, status, onThread, onPanel }: { threadId: string | null; status: ReturnType<typeof useCoachStatus>; onThread: (id: string) => void; onPanel: () => void }) {
   const params = useSearchParams();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [draft, setDraft] = useState("");
@@ -127,9 +148,12 @@ function Chat({ threadId, status, onThread }: { threadId: string | null; status:
   }, [params, status, send, brief, threadId]);
 
   return (
-    <section className="card flex min-h-[calc(100vh-7rem)] flex-col">
+    <section className="card flex min-h-[calc(100dvh-12rem)] flex-col lg:min-h-[calc(100vh-7rem)]">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
         <div className="flex items-center gap-2 font-medium">
+          <button onClick={onPanel} className="grid h-9 w-9 place-items-center rounded-full bg-raised text-mute lg:hidden" aria-label="Chats, memory, knowledge and lessons">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden><path d="M4 6h16M4 12h16M4 18h10" /></svg>
+          </button>
           <Sparkle className="h-4 w-4 text-chart" /> Coach
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -156,7 +180,7 @@ function Chat({ threadId, status, onThread }: { threadId: string | null; status:
         </div>
       </header>
 
-      <div className="flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
+      <div className="flex-1 space-y-5 px-4 py-5 sm:px-6 lg:overflow-y-auto">
         {status && !status.enabled && <CoachSetupNote />}
         {msgs.length === 0 && status?.enabled && (
           <div className="mx-auto max-w-xl py-6 text-center">
@@ -193,7 +217,7 @@ function Chat({ threadId, status, onThread }: { threadId: string | null; status:
       </div>
 
       <form
-        className="border-t border-line p-3 sm:p-4"
+        className="sticky bottom-[calc(5.2rem+env(safe-area-inset-bottom))] rounded-b-[22px] border-t border-line bg-panel p-3 sm:p-4 lg:static"
         onSubmit={(e) => {
           e.preventDefault();
           send(draft);
@@ -205,12 +229,13 @@ function Chat({ threadId, status, onThread }: { threadId: string | null; status:
             id="coach-input"
             rows={2}
             className="max-h-48 min-h-[44px] flex-1 resize-none bg-transparent px-2 py-1.5 text-[15px] outline-none placeholder:text-mute"
-            placeholder={status?.enabled ? "Plan, research, or ask about a trade…  (Enter to send, Shift+Enter for a new line)" : "Coach is not configured yet"}
+            placeholder={status?.enabled ? "Plan, research, or ask about a trade…" : "Coach is not configured yet"}
             value={draft}
             disabled={!status?.enabled}
             onChange={(e) => setDraft(e.target.value)}
+            enterKeyHint="send"
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && window.matchMedia("(pointer: fine)").matches) {
                 e.preventDefault();
                 send(draft);
               }
