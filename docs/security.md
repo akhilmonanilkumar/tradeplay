@@ -29,7 +29,7 @@ Tradeplay is a **single-user** app. Defence is layered so that any one control f
 | Supabase **publishable** key (`sb_publishable_…`) | Public by design — only grants what RLS allows | Same |
 | Supabase **service-role / secret** key | **Secret — never used by this app.** Never put it in env vars, the repo or the browser | Supabase dashboard only |
 | `ALLOWED_IPS` | Low | Vercel env / server `.env` |
-| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `COMPAT_API_KEY` | **Secret** | Vercel env (Production/Preview) or server `.env` — server-only |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `COMPAT_API_KEY` | **Secret** | Vercel env (Production/Preview) or server `.env` — server-only |
 | `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` | Secret | GitHub → Settings → Secrets (only if you self-host) |
 
 ## The IP allowlist — what it does and doesn't do

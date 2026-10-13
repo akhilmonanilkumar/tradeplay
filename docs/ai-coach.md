@@ -13,6 +13,7 @@ Set these as **server** environment variables (Vercel → Settings → Environme
 | `ANTHROPIC_API_KEY` | Anthropic (Claude) | `sk-ant-…` |
 | `OPENAI_API_KEY` (+ optional `OPENAI_BASE_URL`) | OpenAI, or Azure/OpenAI-proxy | `sk-…` |
 | `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) | Google Gemini | `AIza…` |
+| `OPENROUTER_API_KEY` (+ optional `OPENROUTER_FALLBACKS`, `OPENROUTER_ANY_MODEL`) | **OpenRouter** — 400+ models incl. free ones, automatic fallback | `sk-or-v1-…` |
 | `COMPAT_BASE_URL` + `COMPAT_API_KEY` | Any OpenAI-compatible API: OpenRouter, Groq, Together, DeepSeek, Mistral, local Ollama / LM Studio | `https://openrouter.ai/api/v1` |
 | `AI_MODELS` | Which models to offer in the UI. The first one is the default. | `anthropic:claude-sonnet-5-5,google:gemini-2.5-flash,compat:meta-llama/llama-3.3-70b-instruct` |
 | `AI_STT_MODEL` | Speech-to-text fallback model (default `whisper-1`) | |
@@ -21,6 +22,31 @@ Set these as **server** environment variables (Vercel → Settings → Environme
 If `AI_MODELS` is unset, the app offers a sensible default model for every provider that has a key. A model id is `provider:model`, where provider is `anthropic`, `openai`, `google` or `compat`.
 
 **Web research:** when an Anthropic or Gemini model is configured, the chat shows a *Web research* toggle. It uses that provider's built-in web search, through Anthropic's web search tool or Gemini's Google Search grounding.
+
+## OpenRouter (recommended for free use)
+
+1. openrouter.ai → sign in → **Keys** → *Create key* (optionally set a credit limit, e.g. $0 for free-only).
+2. Vercel → Project → Settings → Environment Variables → `OPENROUTER_API_KEY` = the key (Production + Preview) → redeploy. Optional: `APP_URL` (shown as the app on your OpenRouter dashboard).
+3. **Privacy (required for free models):** OpenRouter → Settings → Privacy → allow the free endpoints you're comfortable with. Free providers may log or train on prompts, and coach prompts contain your journal context — use a paid model for anything sensitive.
+4. Open **Coach → Engine**: you'll see connection status, today's free-request count, the free picks, and a searchable catalog of every OpenRouter model (free or paid). Tap one to make it the coach's model on this device.
+
+With only `OPENROUTER_API_KEY` set, the app offers these free models (verified Oct 2026; the catalog changes — Engine always shows the live list):
+
+| Model id | Good for |
+|---|---|
+| `nvidia/nemotron-3-super-120b-a12b:free` | Default — balanced, tools, 262K context |
+| `thinkingmachines/inkling-small:free` | Reasoning (analysis, pre-trade checks), 1M |
+| `thinkingmachines/inkling:free` | Strongest reasoning (outlook, weekly review), slower |
+| `nvidia/nemotron-3-ultra-550b-a55b:free` | Deep multi-step research, 1M |
+| `google/gemma-4-31b-it:free` | Fast general chat, vision |
+| `apodex/apodex-1.1-mini:free` | Research & forecasting, JSON |
+| `nvidia/nemotron-3.5-lightning:free` | Fastest — voice parsing, quick answers |
+| `openrouter/free` | Router that auto-picks any capable free model |
+
+- **Fallbacks:** every request sends a `models` list (your pick + up to 3 others, from `OPENROUTER_FALLBACKS` or the presets above), so a busy or rate-limited free model is skipped automatically.
+- **Limits:** free variants are 20 requests/min and 50/day per account; buying $10 of credits once raises it to 1,000/day. Today's outlook and the morning brief are cached daily, so normal use fits easily.
+- **Web research** on OpenRouter uses the paid `web` plugin (billed to credits); leave it off for free-only use.
+- Paid models (Claude, GPT, DeepSeek, Qwen…) work through the same key — just pick them in Engine.
 
 ## What the coach sees
 

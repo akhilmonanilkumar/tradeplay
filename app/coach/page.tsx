@@ -10,6 +10,7 @@ import { askCoach, preferredModel, setPreferredModel, useCoachStatus } from "@/l
 import { supabase } from "@/lib/supabase";
 import { PLAYBOOK } from "@/lib/ai/playbook";
 import MigrationNotice from "@/components/MigrationNotice";
+import EnginePanel from "@/components/EnginePanel";
 import type { CoachAction, Lesson, Memory, Message, Thread } from "@/lib/types";
 
 type Msg = Pick<Message, "role" | "content"> & { actions?: CoachAction[]; pending?: boolean; error?: boolean };
@@ -24,7 +25,7 @@ const STARTERS = [
 export default function CoachPage() {
   const { coachDb } = useData();
   const status = useCoachStatus();
-  const [side, setSide] = useState<"threads" | "memory" | "knowledge" | "lessons">("threads");
+  const [side, setSide] = useState<"threads" | "memory" | "knowledge" | "lessons" | "engine">("threads");
   const [threadId, setThreadId] = useState<string | null>(null);
   const [threadsKey, setThreadsKey] = useState(0);
   const [panel, setPanel] = useState(false);
@@ -38,13 +39,14 @@ export default function CoachPage() {
           size="xs"
           value={side}
           onChange={setSide}
-          options={[{ value: "threads", label: "Chats" }, { value: "memory", label: "Memory" }, { value: "knowledge", label: "Knowledge" }, { value: "lessons", label: "Lessons" }]}
+          options={[{ value: "threads", label: "Chats" }, { value: "memory", label: "Memory" }, { value: "knowledge", label: "Knowledge" }, { value: "lessons", label: "Lessons" }, { value: "engine", label: "Engine" }]}
         />
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
           {side === "threads" && <Threads key={threadsKey} current={threadId} onPick={setThreadId} />}
           {side === "memory" && <MemoryPanel />}
           {side === "knowledge" && <KnowledgePanel />}
           {side === "lessons" && <LessonsPanel />}
+          {side === "engine" && <EnginePanel />}
         </div>
       </aside>
       {panel && (
@@ -55,13 +57,14 @@ export default function CoachPage() {
           size="xs"
           value={side}
           onChange={setSide}
-          options={[{ value: "threads", label: "Chats" }, { value: "memory", label: "Memory" }, { value: "knowledge", label: "Knowledge" }, { value: "lessons", label: "Lessons" }]}
+          options={[{ value: "threads", label: "Chats" }, { value: "memory", label: "Memory" }, { value: "knowledge", label: "Knowledge" }, { value: "lessons", label: "Lessons" }, { value: "engine", label: "Engine" }]}
         />
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
           {side === "threads" && <Threads key={threadsKey} current={threadId} onPick={(id) => { setThreadId(id); setPanel(false); }} />}
           {side === "memory" && <MemoryPanel />}
           {side === "knowledge" && <KnowledgePanel />}
           {side === "lessons" && <LessonsPanel />}
+          {side === "engine" && <EnginePanel />}
         </div>
                 </div>
         </div>
@@ -93,7 +96,12 @@ function Chat({ threadId, status, onThread, onPanel }: { threadId: string | null
   const kicked = useRef(false);
   const tid = useRef<string | null>(threadId);
 
-  useEffect(() => setModel(preferredModel()), []);
+  useEffect(() => {
+    setModel(preferredModel());
+    const on = (e: Event) => setModel((e as CustomEvent<string>).detail);
+    window.addEventListener("aplus:model", on);
+    return () => window.removeEventListener("aplus:model", on);
+  }, []);
   useEffect(() => {
     if (!threadId) return;
     supabase
@@ -163,7 +171,7 @@ function Chat({ threadId, status, onThread, onPanel }: { threadId: string | null
               Web research
             </label>
           )}
-          {status?.models && status.models.length > 1 && (
+          {status?.models && (status.models.length > 1 || (model && !status.models.some((m) => m.id === model))) && (
             <select
               className="input h-8 min-h-0 w-auto py-0 text-xs"
               value={model ?? status.models[0].id}
@@ -173,10 +181,11 @@ function Chat({ threadId, status, onThread, onPanel }: { threadId: string | null
               }}
               aria-label="Model"
             >
+              {model && !status.models.some((m) => m.id === model) && <option value={model}>{model.replace(/^openrouter:/, "")} · openrouter</option>}
               {status.models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           )}
-          {status?.models?.length === 1 && <Badge>{status.models[0].label}</Badge>}
+          {status?.models?.length === 1 && (!model || model === status.models[0].id) && <Badge>{status.models[0].label}</Badge>}
         </div>
       </header>
 

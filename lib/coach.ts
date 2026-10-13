@@ -11,7 +11,7 @@ export async function authedFetch(path: string, init: RequestInit = {}): Promise
   return fetch(path, { ...init, headers: { ...(init.headers ?? {}), ...(token ? { authorization: `Bearer ${token}` } : {}) } });
 }
 
-export type CoachStatus = { enabled: boolean; models: { id: string; label: string }[]; stt: boolean; webSearch: boolean };
+export type CoachStatus = { enabled: boolean; models: { id: string; label: string }[]; stt: boolean; webSearch: boolean; openrouter?: boolean };
 let statusCache: Promise<CoachStatus> | null = null;
 
 export function coachStatus(): Promise<CoachStatus> {
@@ -45,6 +45,7 @@ export function setPreferredModel(id: string) {
   try {
     localStorage.setItem(MODEL_KEY, id);
   } catch {}
+  window.dispatchEvent(new CustomEvent("aplus:model", { detail: id }));
 }
 
 export type CoachResult = Record<string, unknown> & { reply?: string; actions?: CoachAction[]; error?: string; setup?: boolean; model?: string; thread_id?: string; cached?: boolean };

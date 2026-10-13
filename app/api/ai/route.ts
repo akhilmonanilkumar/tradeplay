@@ -16,7 +16,8 @@ export async function GET(req: Request) {
   const auth = await userClient(req);
   if (auth instanceof Response) return auth;
   const models = availableModels().map(({ id, label }) => ({ id, label }));
-  return json({ enabled: models.length > 0, models, stt: sttAvailable(), webSearch: models.some((m) => /^(anthropic|google):/.test(m.id)) });
+  const openrouter = !!(process.env.OPENROUTER_API_KEY ?? "").trim();
+  return json({ enabled: models.length > 0, models, stt: sttAvailable(), webSearch: models.some((m) => /^(anthropic|google|openrouter):/.test(m.id)), openrouter });
 }
 
 type Body = {
