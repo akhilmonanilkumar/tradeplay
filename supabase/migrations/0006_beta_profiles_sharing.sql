@@ -46,7 +46,7 @@ begin
   end if;
   select * into c from public.beta_codes b
   where b.active and b.uses < b.max_uses and (b.expires_at is null or b.expires_at > now())
-    and b.code_hash = extensions.crypt(coalesce(p_code, ''), b.code_hash)
+    and b.code_hash = extensions.crypt(lower(trim(coalesce(p_code, ''))), b.code_hash)
   limit 1;
   if not found then
     perform pg_sleep(0.5);                   -- slow down guessing

@@ -30,10 +30,15 @@ export default function Login() {
     setMsg("");
     const addr = email.trim().toLowerCase();
     if (mode === "join") {
-      const { error } = await supabase.rpc("redeem_beta_code", { p_email: addr, p_code: code.trim() });
+      const { error } = await supabase.rpc("redeem_beta_code", { p_email: addr, p_code: code.trim().toLowerCase() });
       if (error) {
         setState("error");
-        setMsg(/not valid/i.test(error.message) ? "That access code isn't valid." : /valid email/i.test(error.message) ? "Enter a valid email address." : error.message);
+        setMsg(
+          /not valid/i.test(error.message) ? "That access code isn't valid."
+          : /valid email/i.test(error.message) ? "Enter a valid email address."
+          : /could not find the function|schema cache|PGRST202/i.test(error.message + (error.code ?? "")) ? "Beta sign-ups aren't switched on yet — please try again shortly."
+          : error.message,
+        );
         return;
       }
     }
