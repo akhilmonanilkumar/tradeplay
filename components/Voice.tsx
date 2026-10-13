@@ -142,22 +142,37 @@ export default function VoiceButton({
 
   if (!supported) return null;
   const listening = state === "listening";
+  const busy = state === "transcribing";
+  const dim = size === "sm" ? "h-9 w-9" : "h-11 w-11";
   return (
-    <span className="inline-flex flex-col items-start">
-      <button
-        type="button"
-        onClick={toggle}
-        disabled={state === "transcribing"}
-        className={`inline-flex items-center gap-2 rounded-full border transition ${size === "sm" ? "h-8 px-3 text-xs" : "h-10 px-4 text-sm"} ${listening ? "recording border-down bg-down/10 text-down" : "border-accent/40 bg-accent/10 text-ink hover:border-accent"}`}
-        aria-pressed={listening}
-        aria-label={listening ? "Stop dictation" : label}
-      >
-        <svg viewBox="0 0 24 24" className={size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
-          {listening ? <rect x="7" y="7" width="10" height="10" rx="2" /> : <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></>}
-        </svg>
-        {state === "transcribing" ? "Transcribing…" : listening ? "Stop" : label}
-      </button>
-      {err && <span className="mt-1 text-xs text-down">{err}</span>}
+    <span className="inline-flex shrink-0 flex-col items-center">
+      <span className="inline-flex items-center gap-2.5">
+        <button
+          type="button"
+          onClick={toggle}
+          disabled={busy}
+          title={listening ? "Stop" : label}
+          className={`voice-btn relative grid ${dim} shrink-0 place-items-center rounded-full text-white shadow-[0_4px_14px_rgb(var(--chart)/0.35)] transition active:scale-95 disabled:opacity-70 ${listening ? "is-live bg-down" : "bg-[linear-gradient(135deg,rgb(var(--chart)),#4F46E5)] hover:brightness-110"}`}
+          aria-pressed={listening}
+          aria-label={listening ? "Stop listening" : label}
+        >
+          {listening && <span className="voice-ring absolute inset-0 rounded-full" aria-hidden />}
+          {busy ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden />
+          ) : listening ? (
+            <span className="flex h-4 items-center gap-[3px]" aria-hidden>
+              {[0, 1, 2, 3].map((k) => <span key={k} className="voice-bar w-[3px] rounded-full bg-white" style={{ animationDelay: `${k * 0.12}s` }} />)}
+            </span>
+          ) : (
+            <svg viewBox="0 0 24 24" className={size === "sm" ? "h-4 w-4" : "h-5 w-5"} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="9" y="3" width="6" height="11" rx="3" />
+              <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+            </svg>
+          )}
+        </button>
+        {size === "md" && <span className="text-sm text-mute">{busy ? "Transcribing…" : listening ? "Listening… tap to stop" : label}</span>}
+      </span>
+      {err && <span className="mt-1 max-w-[12rem] text-center text-[11px] text-down">{err}</span>}
     </span>
   );
 }

@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { tzAbbr, getTimeZone } from "@/lib/tz";
 import { accountState, disciplineScore, fmtIST, fmtUsd, sessionAt, stats, todayIST, windowLabel } from "@/lib/calc";
 import { diagnoseTrade, matchLessons, recurringCauses } from "@/lib/analysis";
 import { nudges } from "@/lib/nudges";
@@ -51,7 +52,7 @@ export function describe(s: Snapshot, now = new Date(), focusAccountId?: string 
   const today = todayIST(now);
   const out: string[] = [];
   const sess = sessionAt(now);
-  out.push(`NOW: ${fmtIST(now)} IST (${today}). Current Q-zone: ${sess.inWindow ? sess.name : "off-session"}.`);
+  out.push(`NOW: ${fmtIST(now)} ${tzAbbr(now)} (${today}, time zone ${getTimeZone()}). Current Q-zone: ${sess.inWindow ? sess.name : "off-session"}.`);
 
   out.push("\nACCOUNTS:");
   for (const a of s.accounts.filter((x) => x.status === "active" || x.id === focusAccountId)) {
@@ -64,7 +65,7 @@ export function describe(s: Snapshot, now = new Date(), focusAccountId?: string 
     );
     if (plan)
       out.push(
-        `  Today's plan: bias ${plan.bias ?? "—"}; HTF ${plan.htf_range ?? "—"}; magnet ${plan.magnet ?? "—"}; invalidation ${plan.invalidation ?? "—"}; POIs ${plan.pois ?? "—"}; news ${(plan.news_times ?? []).join(", ") || "none"} IST; sessions ${windowLabel(a, plan)}; checklist ${Object.values(plan.checklist ?? {}).filter(Boolean).length}/6${plan.notes ? `; notes: ${plan.notes.slice(0, 300)}` : ""}.`,
+        `  Today's plan: bias ${plan.bias ?? "—"}; HTF ${plan.htf_range ?? "—"}; magnet ${plan.magnet ?? "—"}; invalidation ${plan.invalidation ?? "—"}; POIs ${plan.pois ?? "—"}; news ${(plan.news_times ?? []).join(", ") || "none"} ${tzAbbr()}; sessions ${windowLabel(a, plan)}; checklist ${Object.values(plan.checklist ?? {}).filter(Boolean).length}/6${plan.notes ? `; notes: ${plan.notes.slice(0, 300)}` : ""}.`,
       );
     else out.push("  No plan written for today yet.");
   }
@@ -94,7 +95,7 @@ export function describe(s: Snapshot, now = new Date(), focusAccountId?: string 
   const nd = nudges(now, { accounts: s.accounts, plans: s.plans, trades: s.trades, reminders: s.reminders, reviews: s.reviews });
   if (nd.length) out.push("\nPENDING REMINDERS/NUDGES:", ...nd.slice(0, 10).map((n) => `- ${n.text}`));
   const upcoming = s.reminders.filter((r) => new Date(r.due_at) > now).slice(0, 8);
-  if (upcoming.length) out.push("SCHEDULED REMINDERS:", ...upcoming.map((r) => `- ${fmtIST(r.due_at)} IST: ${r.text}`));
+  if (upcoming.length) out.push("SCHEDULED REMINDERS:", ...upcoming.map((r) => `- ${fmtIST(r.due_at)} ${tzAbbr()}: ${r.text}`));
 
   return out.join("\n");
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { getTimeZone } from "@/lib/tz";
+import { getTimeZone, isValidTimeZone, setTimeZone, COMMON_ZONES } from "@/lib/tz";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
@@ -12,6 +12,12 @@ import { Logo, Mark } from "@/components/Brand";
 import AskBar from "@/components/AskBar";
 import CommandPalette from "@/components/CommandPalette";
 import ReminderCenter from "@/components/Reminders";
+import { Avatar } from "@/components/Avatar";
+import ProfileModal from "@/components/ProfileModal";
+import { CoachIcon } from "@/components/CoachMark";
+import NotifyPrompt from "@/components/NotifyPrompt";
+import { ACCOUNT_TEMPLATES, DEFAULT_SETUPS } from "@/lib/templates";
+import type { Profile } from "@/lib/profile";
 
 type Data = {
   session: Session;
@@ -28,6 +34,11 @@ type Data = {
   checkins: Checkin[];
   /** False until migration 0005 is applied — coach/lessons/reminders UI shows a notice instead. */
   coachDb: boolean;
+  /** Your profile row (null until saved, or before migration 0006). */
+  profile: Profile | null;
+  /** False until migration 0006 is applied (profiles, sharing, leaderboard). */
+  socialDb: boolean;
+  openProfile: () => void;
   refresh: () => Promise<void>;
   /** Today's (IST) plan for an account, if written. */
   todayPlan: (accountId: string) => DayPlan | null;
@@ -46,13 +57,16 @@ export const NAV = [
   { href: "/new", label: "New trade", icon: "M12 5v14M5 12h14" },
   { href: "/trades", label: "Trades", icon: "M4 6h16M4 12h16M4 18h10" },
   { href: "/analytics", label: "Insights", icon: "M4 20V10M10 20V4M16 20v-7M22 20H2" },
-  { href: "/coach", label: "Coach", icon: "M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z" },
+  { href: "/coach", label: "Coach", icon: "coach" },
+  { href: "/academy", label: "Academy", icon: "M3 9l9-5 9 5-9 5zM7 11.5V16c0 1.5 2.2 3 5 3s5-1.5 5-3v-4.5M21 9v6" },
   { href: "/review", label: "Review", icon: "M5 4h14v16l-7-4-7 4z" },
+  { href: "/leaderboard", label: "Leaderboard", icon: "M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 6h3v2a3 3 0 0 1-3 3M7 6H4v2a3 3 0 0 0 3 3" },
   { href: "/accounts", label: "Accounts", icon: "M3 7h18v12H3zM3 11h18M7 15h3" },
 ];
 const MOBILE = ["/", "/plan", "/new", "/coach"];
 
 export function Icon({ d, className = "h-4 w-4" }: { d: string; className?: string }) {
+  if (d === "coach") return <CoachIcon className={className} />;
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
       <path d={d} />
@@ -97,14 +111,19 @@ export function ThemeToggle({ compact = false, rail = false }: { compact?: boole
 const missingTable = (e: { code?: string; message?: string } | null) =>
   !!e && (e.code === "42P01" || e.code === "PGRST205" || /does not exist|could not find the table/i.test(e.message ?? ""));
 
+/** Pages anyone can open without signing in (and outside the app chrome). */
+const PUBLIC = [/^\/login/, /^\/u\//, /^\/t\//, /^\/leaderboard/];
+
 export default function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [session, setSession] = useState<Session | null | undefined>(undefined);
-  const [data, setData] = useState<Omit<Data, "session" | "refresh" | "todayPlan"> | null>(null);
+  const [data, setData] = useState<Omit<Data, "session" | "refresh" | "todayPlan" | "openProfile"> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [palette, setPalette] = useState(false);
   const [more, setMore] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const isPublic = PUBLIC.some((r) => r.test(pathname));
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -113,7 +132,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refresh = useCallback(async () => {
-    const [a, s, t, p, r, dp, adj, les, rem, mem, ci] = await Promise.all([
+    const [a, s, t, p, r, dp, adj, les, rem, mem, ci, pr] = await Promise.all([
       supabase.from("accounts").select("*").order("created_at"),
       supabase.from("setups").select("*").order("created_at"),
       supabase.from("trades").select("*").order("opened_at", { ascending: false }).limit(5000),
@@ -125,6 +144,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       supabase.from("reminders").select("*").order("due_at").limit(500),
       supabase.from("ai_memory").select("*").order("created_at", { ascending: false }).limit(300),
       supabase.from("checkins").select("*").order("checkin_date", { ascending: false }).limit(400),
+      supabase.from("profiles").select("*").maybeSingle(),
     ]);
     const err = a.error || s.error || t.error || p.error || r.error || dp.error;
     if (err) return setError(err.message);
@@ -132,6 +152,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     const coachDb = !optional.some((x) => missingTable(x.error));
     const hardErr = optional.find((x) => x.error && !missingTable(x.error))?.error;
     if (hardErr) return setError(hardErr.message);
+    const socialDb = !missingTable(pr.error);
+    const profile = (pr.error ? null : (pr.data as Profile | null)) ?? null;
+    setTimeZone(profile?.timezone && isValidTimeZone(profile.timezone) ? profile.timezone : "Asia/Kolkata");
     setData({
       accounts: a.data as Account[],
       setups: s.data as Setup[],
@@ -145,6 +168,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       memory: (mem.data ?? []) as Memory[],
       checkins: (ci.data ?? []) as Checkin[],
       coachDb,
+      profile,
+      socialDb,
     });
   }, []);
 
@@ -180,9 +205,11 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     (accountId: string) => data?.plans.find((p) => p.account_id === accountId && p.plan_date === todayIST()) ?? null,
     [data?.plans],
   );
-  const value = useMemo(() => (data && session ? { session, refresh, todayPlan, ...data } : null), [data, session, refresh, todayPlan]);
+  const openProfile = useCallback(() => setProfileOpen(true), []);
+  const value = useMemo(() => (data && session ? { ...data, session, refresh, todayPlan, openProfile } : null), [data, session, refresh, todayPlan, openProfile]);
 
-  if (pathname === "/login") return <>{children}</>;
+  // Public pages (login, shared profiles/trades, leaderboard) render without the app chrome or a session.
+  if (isPublic) return <>{children}</>;
 
   if (session === undefined) return <Splash text="Loading…" />;
   if (session === null) {
@@ -192,10 +219,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   if (error) return <Splash text={`Couldn't load data: ${error}`} />;
   if (!data || !value) return <Splash text="Loading your journal…" />;
 
-  if (data.accounts.length === 0) return <Onboard onDone={refresh} />;
+  if (data.accounts.length === 0) return <Onboard onDone={refresh} socialDb={data.socialDb} hasProfile={!!data.profile} />;
 
   const active = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
-  const name = (session.user.user_metadata?.name as string | undefined)?.trim() || "";
 
   return (
     <Ctx.Provider value={value}>
@@ -220,9 +246,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               ))}
             </nav>
             <div className="flex-1" />
-            <RailButton label="Theme" onClick={() => {}}>
-              <ThemeToggle compact rail />
-            </RailButton>
             <button onClick={() => supabase.auth.signOut()} aria-label="Sign out" className="group relative grid h-11 w-11 place-items-center rounded-[14px] text-[#9AA0AA] hover:bg-white/10 hover:text-white">
               <Icon d="M15 4h4v16h-4M10 17l5-5-5-5M15 12H3" className="h-5 w-5" />
               <span className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-solid px-2.5 py-1 text-xs font-medium text-solid-ink opacity-0 shadow-lg transition group-hover:opacity-100">Sign out</span>
@@ -234,7 +257,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             <header className="sticky top-0 z-20 flex items-center justify-between gap-3 bg-bg/85 px-4 pb-2.5 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-xl md:static md:bg-transparent md:px-2 md:py-1 md:backdrop-blur-none">
               <Link href="/" className="flex items-center gap-2 md:hidden">
                 <Logo className="h-8 w-8" />
-                <span className="text-[15px] font-semibold tracking-tight"><span className="text-accent">A+</span> TradePlay</span>
+                <span className="text-[15px] font-semibold tracking-tight">TradePlay</span>
               </Link>
               <div className="hidden text-sm text-mute md:block">
                 {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: getTimeZone() })}
@@ -249,7 +272,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                   <Icon d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-4.3-4.3" />
                 </button>
                 <ReminderCenter compact />
-                <ProfileButton name={name} email={session.user.email ?? ""} />
+                <ThemeToggle compact />
+                <ProfileButton profile={data.profile} email={session.user.email ?? ""} onClick={openProfile} />
               </div>
             </header>
             <main className="pb-nav mx-auto w-full max-w-[1400px] flex-1 px-4 pt-3 sm:px-6 md:px-2 md:pb-28">{children}</main>
@@ -257,7 +281,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      {pathname !== "/coach" && <AskBar hideOnPhone={["/new", "/plan", "/accounts"].some((p) => pathname.startsWith(p))} />}
+      {pathname !== "/coach" && !pathname.startsWith("/academy") && <AskBar hideOnPhone={["/new", "/plan", "/accounts"].some((p) => pathname.startsWith(p))} />}
       <PullToRefresh onRefresh={refresh} />
 
       {/* Mobile bottom nav */}
@@ -285,12 +309,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               <Icon d={n.icon} /> {n.label}
             </Link>
           ))}
-          <div className="col-span-2 px-0.5 [&>button]:py-3"><ThemeToggle /></div>
           <button onClick={() => supabase.auth.signOut()} className="col-span-2 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-mute hover:bg-raised">
             <Icon d="M15 4h4v16h-4M10 17l5-5-5-5M15 12H3" /> Sign out
           </button>
         </div>
       )}
+      <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} profile={data.profile} email={session.user.email ?? ""} ready={data.socialDb} onSaved={refresh} />
+      <NotifyPrompt />
       <CommandPalette open={palette} onClose={() => setPalette(false)} go={(href) => { setPalette(false); router.push(href); }} />
     </Ctx.Provider>
   );
@@ -341,31 +366,12 @@ function PullToRefresh({ onRefresh }: { onRefresh: () => Promise<void> }) {
   );
 }
 
-function RailButton({ label, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+/** Your avatar in the top bar; opens the profile modal. */
+function ProfileButton({ profile, email, onClick }: { profile: Profile | null; email: string; onClick: () => void }) {
+  const label = profile?.display_name || (profile?.username ? `@${profile.username}` : email);
   return (
-    <div className="group relative">
-      {children}
-      <span className="pointer-events-none absolute left-full top-1/2 ml-3 -translate-y-1/2 whitespace-nowrap rounded-lg bg-solid px-2.5 py-1 text-xs font-medium text-solid-ink opacity-0 shadow-lg transition group-hover:opacity-100">{label}</span>
-    </div>
-  );
-}
-
-/** Avatar with your initial; click to set the name used in the greeting (stored in your auth profile). */
-function ProfileButton({ name, email }: { name: string; email: string }) {
-  const initial = (name || email || "A").trim().charAt(0).toUpperCase();
-  return (
-    <button
-      className="grid h-10 w-10 place-items-center rounded-full bg-[#F2C14E] text-sm font-bold text-[#141518] sm:h-11 sm:w-11"
-      title={name ? `${name} — click to rename` : "Set your name"}
-      aria-label="Profile name"
-      onClick={async () => {
-        const v = window.prompt("What should the app call you?", name);
-        if (v == null) return;
-        await supabase.auth.updateUser({ data: { name: v.trim().slice(0, 40) } });
-        await supabase.auth.refreshSession();
-      }}
-    >
-      {initial}
+    <button onClick={onClick} className="grid h-10 w-10 place-items-center rounded-full ring-2 ring-transparent transition hover:ring-chart/50 sm:h-11 sm:w-11" title={label} aria-label="Your profile">
+      <Avatar id={profile?.avatar ?? "a1"} size={40} label="Your avatar" />
     </button>
   );
 }
@@ -381,36 +387,86 @@ function Splash({ text }: { text: string }) {
   );
 }
 
-function Onboard({ onDone }: { onDone: () => Promise<void> }) {
+/** First run for a new trader: pick account templates, set balances and time zone. */
+function Onboard({ onDone, socialDb, hasProfile }: { onDone: () => Promise<void>; socialDb: boolean; hasProfile: boolean }) {
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const [picked, setPicked] = useState<Record<string, string>>({ [ACCOUNT_TEMPLATES[0].id]: String(ACCOUNT_TEMPLATES[0].row.starting_balance) });
+  const [tz, setTz] = useState(isValidTimeZone(browserTz) ? browserTz : "Asia/Kolkata");
+  const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const zones = [...new Set([tz, browserTz, ...COMMON_ZONES].filter(isValidTimeZone))];
+
+  async function start() {
+    const chosen = ACCOUNT_TEMPLATES.filter((t) => picked[t.id] != null);
+    if (!chosen.length) return setErr("Pick at least one account");
+    setBusy(true);
+    setErr(null);
+    const rows = chosen.map((t) => {
+      const bal = Number(picked[t.id]) > 0 ? Number(picked[t.id]) : t.row.starting_balance;
+      const k = bal / t.row.starting_balance;
+      return {
+        ...t.row,
+        starting_balance: bal,
+        risk_ladder: t.row.risk_ladder.map((x) => ({ ...x, min_equity: x.min_equity ? Math.round(x.min_equity * k) : 0 })),
+      };
+    });
+    const { error } = await supabase.from("accounts").insert(rows);
+    if (error) {
+      setBusy(false);
+      return setErr(error.message);
+    }
+    const { count } = await supabase.from("setups").select("id", { count: "exact", head: true });
+    if (!count) await supabase.from("setups").insert(DEFAULT_SETUPS);
+    if (socialDb && !hasProfile) await supabase.from("profiles").upsert({ timezone: tz, display_name: name.trim().slice(0, 40) || null }, { onConflict: "user_id" });
+    if (name.trim()) await supabase.auth.updateUser({ data: { name: name.trim().slice(0, 40) } });
+    setTimeZone(tz);
+    await onDone();
+    setBusy(false);
+  }
+
   return (
-    <div className="grid min-h-screen place-items-center px-4">
-      <div className="card max-w-md p-6">
+    <div className="grid min-h-screen place-items-center px-4 py-10">
+      <div className="card w-full max-w-lg p-6">
         <Logo className="h-10 w-10" />
-        <h1 className="mt-4 text-xl font-semibold">Set up your accounts</h1>
-        <p className="mt-2 text-sm text-mute">
-          Loads your two accounts with their firm rules and risk ladders. You can edit everything later under Accounts.
-        </p>
-        <ul className="mt-4 space-y-1 text-sm">
-          <li>• FundedHive 25K PFP — XAUUSD, $125 risk/trade</li>
-          <li>• Breakout 5K Funded — BTCUSDT.P, $25 risk/trade</li>
-          <li>• Setups: Market Shift, Flip Zone, Sweep → OB → FVG</li>
+        <h1 className="mt-4 text-xl font-semibold">Welcome to the beta</h1>
+        <p className="mt-1 text-sm text-mute">Pick a starting point for your accounts. Every rule, limit and risk tier stays editable under Accounts.</p>
+
+        <label className="label mt-5 block">What should we call you?</label>
+        <input className="input mt-1.5" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
+
+        <div className="label mb-2 mt-5">Your accounts</div>
+        <ul className="space-y-2">
+          {ACCOUNT_TEMPLATES.map((t) => {
+            const on = picked[t.id] != null;
+            return (
+              <li key={t.id} className={`rounded-2xl border p-3 transition ${on ? "border-chart/50 bg-chart/5" : "border-line"}`}>
+                <button type="button" className="flex w-full items-start gap-3 text-left" aria-pressed={on} onClick={() => setPicked((p) => { const n = { ...p }; if (on) delete n[t.id]; else n[t.id] = String(t.row.starting_balance); return n; })}>
+                  <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border ${on ? "border-chart bg-chart text-white" : "border-mute/50"}`}>{on && "✓"}</span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">{t.label}</span>
+                    <span className="block text-xs text-mute">{t.blurb}</span>
+                  </span>
+                </button>
+                {on && (
+                  <label className="mt-2 flex items-center gap-2 pl-8 text-xs text-mute">
+                    Starting balance $
+                    <input className="input num h-9 w-32" inputMode="decimal" value={picked[t.id]} onChange={(e) => setPicked((p) => ({ ...p, [t.id]: e.target.value.replace(/[^0-9.]/g, "") }))} />
+                  </label>
+                )}
+              </li>
+            );
+          })}
         </ul>
+
+        <label className="label mt-5 block">Time zone</label>
+        <select className="input mt-1.5" value={tz} onChange={(e) => setTz(e.target.value)}>
+          {zones.map((z) => <option key={z} value={z}>{z.replace(/_/g, " ")}</option>)}
+        </select>
+
         {err && <p className="mt-3 text-sm text-down">{err}</p>}
-        <button
-          className="btn-primary mt-5 w-full"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            const { error } = await supabase.rpc("seed_my_defaults");
-            if (error) setErr(error.message);
-            await onDone();
-            setBusy(false);
-          }}
-        >
-          {busy ? "Setting up…" : "Load my accounts"}
-        </button>
+        <button className="btn-primary mt-5 h-11 w-full" disabled={busy} onClick={start}>{busy ? "Setting up…" : "Start journaling"}</button>
+        <button className="mt-3 w-full text-center text-xs text-mute hover:text-ink" onClick={() => supabase.auth.signOut()}>Sign out</button>
       </div>
     </div>
   );

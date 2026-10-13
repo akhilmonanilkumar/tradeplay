@@ -1,11 +1,13 @@
 "use client";
 
+import { confirmDialog } from "@/components/Dialogs";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useData } from "@/components/Shell";
 import { Badge, Segmented } from "@/components/ui";
 import VoiceButton from "@/components/Voice";
-import { ActionChips, CoachSetupNote, Markdown, Sparkle } from "@/components/coach-ui";
+import { ActionChips, CoachSetupNote, Markdown } from "@/components/coach-ui";
+import { CoachAvatar } from "@/components/CoachMark";
 import { askCoach, preferredModel, setPreferredModel, useCoachStatus } from "@/lib/coach";
 import { supabase } from "@/lib/supabase";
 import { PLAYBOOK } from "@/lib/ai/playbook";
@@ -162,7 +164,7 @@ function Chat({ threadId, status, onThread, onPanel }: { threadId: string | null
           <button onClick={onPanel} className="grid h-9 w-9 place-items-center rounded-full bg-raised text-mute lg:hidden" aria-label="Chats, memory, knowledge and lessons">
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" aria-hidden><path d="M4 6h16M4 12h16M4 18h10" /></svg>
           </button>
-          <Sparkle className="h-4 w-4 text-chart" /> Coach
+          <CoachAvatar size={26} /> A+ Coach
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {status?.webSearch && (
@@ -193,7 +195,7 @@ function Chat({ threadId, status, onThread, onPanel }: { threadId: string | null
         {status && !status.enabled && <CoachSetupNote />}
         {msgs.length === 0 && status?.enabled && (
           <div className="mx-auto max-w-xl py-6 text-center">
-            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-chart/15 text-chart"><Sparkle className="h-6 w-6" /></div>
+            <CoachAvatar size={56} className="mx-auto" />
             <h2 className="mt-4 text-lg font-semibold">Plan, research, reflect</h2>
             <p className="mt-1 text-sm text-mute">The coach sees your accounts, guardrails, plans, trades, lessons, memory and knowledgebase. It proposes; you apply.</p>
             <div className="mt-5 grid gap-2 sm:grid-cols-2">
@@ -208,7 +210,9 @@ function Chat({ threadId, status, onThread, onPanel }: { threadId: string | null
           m.role === "user" ? (
             <div key={i} className="ml-auto max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-raised px-4 py-2.5 text-[15px]">{m.content}</div>
           ) : (
-            <div key={i} className="max-w-[92%] text-[15px]">
+            <div key={i} className="flex max-w-[94%] gap-3 text-[15px]">
+              <CoachAvatar size={28} className="mt-0.5 hidden sm:block" />
+              <div className="min-w-0 flex-1">
               {m.pending ? (
                 <span className="inline-flex items-center gap-2 text-sm text-mute"><span className="h-2 w-2 animate-pulse rounded-full bg-accent" /> Thinking…</span>
               ) : m.error ? (
@@ -219,6 +223,7 @@ function Chat({ threadId, status, onThread, onPanel }: { threadId: string | null
                   <ActionChips actions={m.actions} />
                 </>
               )}
+              </div>
             </div>
           ),
         )}
@@ -276,10 +281,11 @@ function Threads({ current, onPick }: { current: string | null; onPick: (id: str
           <li key={t.id} className={`group flex items-center gap-1 rounded-lg ${current === t.id ? "bg-raised" : "hover:bg-raised/60"}`}>
             <button className="min-w-0 flex-1 truncate px-2.5 py-2 text-left text-sm" onClick={() => onPick(t.id)}>{t.title}</button>
             <button
-              className="px-2 text-xs text-mute opacity-0 hover:text-down group-hover:opacity-100"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-mute hover:bg-down/10 hover:text-down sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
               aria-label="Delete conversation"
+              title="Delete conversation"
               onClick={async () => {
-                if (!confirm("Delete this conversation?")) return;
+                if (!(await confirmDialog({ title: "Delete this conversation?", body: "The messages are removed for good. Lessons and memories it created stay.", danger: true }))) return;
                 await supabase.from("ai_threads").delete().eq("id", t.id);
                 if (current === t.id) onPick(null);
                 load();
@@ -427,7 +433,7 @@ function KnowledgePanel() {
             <span className="min-w-0 truncate">{d.title}</span>
             <span className="flex shrink-0 items-center gap-2 text-[11px] text-mute">
               {d.chunks}×
-              <button className="opacity-60 hover:text-down group-hover:opacity-100" aria-label={`Remove ${d.title}`} onClick={async () => { if (!confirm(`Remove “${d.title}” from the knowledgebase?`)) return; await supabase.from("kb_docs").delete().eq("title", d.title); load(); }}>✕</button>
+              <button className="opacity-60 hover:text-down group-hover:opacity-100" aria-label={`Remove ${d.title}`} onClick={async () => { if (!(await confirmDialog({ title: `Remove “${d.title}”?`, body: "The coach will stop using this document.", confirmLabel: "Remove", danger: true }))) return; await supabase.from("kb_docs").delete().eq("title", d.title); load(); }}>✕</button>
             </span>
           </li>
         ))}
@@ -451,7 +457,7 @@ function LessonsPanel() {
         <Badge tone={l.kind === "win" ? "up" : l.kind === "loss" ? "down" : "accent"}>{l.kind}</Badge>
         <span>{l.source}</span>
         <button className="hover:text-ink" onClick={async () => { await supabase.from("lessons").update({ active: !l.active }).eq("id", l.id); refresh(); }}>{l.active ? "Archive" : "Restore"}</button>
-        <button className="hover:text-down" onClick={async () => { if (!confirm("Delete lesson?")) return; await supabase.from("lessons").delete().eq("id", l.id); refresh(); }}>Delete</button>
+        <button className="hover:text-down" onClick={async () => { if (!(await confirmDialog({ title: "Delete this lesson?", danger: true }))) return; await supabase.from("lessons").delete().eq("id", l.id); refresh(); }}>Delete</button>
       </div>
     </li>
   );

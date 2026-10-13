@@ -33,9 +33,18 @@ export function feeShare(account: Pick<Account, "fee_rate">, entry: number, sl: 
   return total ? fee / total : 0;
 }
 
+/** Round a position size down to the broker step (gold & FX lots 0.01, crypto 0.001), without float noise. */
 export function roundSize(instrument: string, size: number): number {
-  const step = /XAU|GOLD/i.test(instrument) ? 0.01 : 0.001;
-  return Math.floor(size / step) * step;
+  const fxOrGold = /XAU|GOLD/i.test(instrument) || /^(?!BTC|ETH|SOL|XRP)[A-Z]{6}$/i.test(instrument);
+  const dp = fxOrGold ? 2 : 3;
+  const step = 10 ** -dp;
+  return Number((Math.floor(size / step + 1e-9) * step).toFixed(dp));
+}
+
+/** Price at which a trade made `r` times its risk (negative r = towards the stop). */
+export function rLevel(direction: "long" | "short", entry: number, sl: number, r: number): number {
+  const d = Math.abs(entry - sl) * r;
+  return direction === "long" ? entry + d : entry - d;
 }
 
 /* ---------- account state ---------- */

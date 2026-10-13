@@ -4,6 +4,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import Shell from "@/components/Shell";
 import RegisterSW from "@/components/RegisterSW";
+import { DialogHost } from "@/components/Dialogs";
 import "./globals.css";
 
 const siteUrl =
@@ -49,6 +50,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-screen font-sans">
         <Shell>{children}</Shell>
         <RegisterSW />
+        <DialogHost />
       </body>
     </html>
   );

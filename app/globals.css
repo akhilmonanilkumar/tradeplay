@@ -237,3 +237,10 @@ a, button, [role="button"], input, select, textarea, label, summary { touch-acti
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Round AI voice button */
+@keyframes voice-bar { 0%, 100% { height: 4px; } 50% { height: 16px; } }
+@keyframes voice-ring { 0% { box-shadow: 0 0 0 0 rgb(var(--down) / 0.45); } 100% { box-shadow: 0 0 0 12px rgb(var(--down) / 0); } }
+.voice-bar { height: 4px; animation: voice-bar 0.9s ease-in-out infinite; }
+.voice-ring { animation: voice-ring 1.3s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) { .voice-bar, .voice-ring { animation: none; height: 10px; } }

@@ -56,7 +56,7 @@ export default function Login() {
       <div className="w-full max-w-sm">
         <form onSubmit={send} className="card p-6">
           <Logo className="h-11 w-11" />
-          <h1 className="mt-4 text-xl font-semibold tracking-tight"><span className="text-accent">A+</span> TradePlay</h1>
+          <h1 className="mt-4 text-xl font-semibold tracking-tight">TradePlay</h1>
           <p className="mt-1 text-sm text-mute">Journal, guardrails and an AI coach for funded traders. Closed beta.</p>
 
           <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-raised p-1 text-sm" role="tablist">

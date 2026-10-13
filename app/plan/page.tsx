@@ -9,7 +9,8 @@ import { supabase } from "@/lib/supabase";
 import { todayIST, windowLabel, sessionAt } from "@/lib/calc";
 import { parseDictation } from "@/lib/analysis";
 import { newsTimesFor } from "@/lib/events";
-import { tzAbbr } from "@/lib/tz";
+import { localToUtc, tzAbbr, getTimeZone } from "@/lib/tz";
+import { ShotGallery } from "@/components/Shots";
 import { askCoach, resolveAccount, useCoachStatus } from "@/lib/coach";
 import { PREMARKET, SESSION_CHOICES, type DayPlan, type SessionName } from "@/lib/types";
 
@@ -34,7 +35,7 @@ function mergeVoice(d: Draft, f: Record<string, unknown>, text: string): Draft {
 }
 
 export default function Plan() {
-  const { accounts, plans, refresh, coachDb } = useData();
+  const { accounts, plans, refresh, coachDb, socialDb, session: auth } = useData();
   const status = useCoachStatus();
   const market = useMarket();
   const [heard, setHeard] = useState("");
@@ -98,6 +99,7 @@ export default function Plan() {
       checklist: draft!.checklist,
       notes: draft!.notes || null,
       ...(coachDb ? { sessions: draft!.sessions ?? [], custom_window: (draft!.sessions ?? []).includes("Custom") ? draft!.custom_window || null : null } : {}),
+      ...(socialDb ? { images: draft!.images ?? [] } : {}),
     };
     if (coachDb && (draft!.sessions ?? []).includes("Custom") && !/^\d{2}:\d{2}-\d{2}:\d{2}$/.test(draft!.custom_window ?? "")) {
       setErr("Custom window needs a from and to time");
@@ -137,6 +139,22 @@ export default function Plan() {
   const calTimes = newsTimesFor(market.data?.events ?? [], date);
   const sessions = draft.sessions ?? [];
   const [cwFrom, cwTo] = (draft.custom_window ?? "-").split("-");
+  // Kill-zone presets (defined in New York time) shown in your own time zone.
+  const nyToLocal = (h: number) => new Intl.DateTimeFormat("en-GB", { timeZone: getTimeZone(), hour: "2-digit", minute: "2-digit", hour12: false }).format(localToUtc(date, `${String(h).padStart(2, "0")}:00`, "America/New_York"));
+  const PRESETS = [
+    { label: "London open", from: 2, to: 5 },
+    { label: "NY open", from: 7, to: 10 },
+    { label: "London–NY overlap", from: 8, to: 11 },
+    { label: "Asia", from: 20, to: 23 },
+  ].map((x) => ({ ...x, win: `${nyToLocal(x.from)}-${nyToLocal(x.to)}` }));
+  const savePlanImages = async (paths: string[]) => {
+    set("images", paths);
+    if (existing) {
+      const { error } = await supabase.from("day_plans").update({ images: paths }).eq("id", existing.id);
+      if (error) setErr(error.message);
+      else refresh();
+    }
+  };
 
   return (
     <>
@@ -189,8 +207,21 @@ export default function Plan() {
               <textarea className="input min-h-16" maxLength={2000} value={draft.pois ?? ""} onChange={(e) => set("pois", e.target.value)} />
             </Field>
             {coachDb && (
-              <Field label="Sessions to trade today" hint={sessions.length ? `Entries allowed in: ${windowLabel(acct ?? { session_window: "Any" }, draft)} · now ${sessionAt().inWindow ? sessionAt().name : "off-session"}` : `Using the account default (${acct?.session_window ?? "—"}). Pick one or more to override for this day.`}>
+              <Field label={`Trading window · ${acct?.instrument ?? ""}`} hint={sessions.length ? `Entries for ${acct?.instrument ?? "this account"} allowed only in: ${windowLabel(acct ?? { session_window: "Any" }, draft)} · now ${sessionAt().inWindow ? sessionAt().name : "off-session"}` : `Using the account default (${acct?.session_window ?? "—"}). Pick sessions or a custom window for this day — outside it, new trades are flagged as off-plan.`}>
                 <Chips options={SESSION_CHOICES} value={sessions} onChange={(v) => set("sessions", v as SessionName[])} />
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] text-mute">Quick windows:</span>
+                  {PRESETS.map((x) => (
+                    <button
+                      key={x.label}
+                      type="button"
+                      className={`chip h-8 px-2.5 text-[11px] ${sessions.includes("Custom") && draft.custom_window === x.win ? "border-chart bg-chart/10 text-ink" : "hover:text-ink"}`}
+                      onClick={() => setDraft((d) => (d ? { ...d, sessions: ["Custom"], custom_window: x.win } : d))}
+                    >
+                      {x.label} <span className="num ml-1 text-mute">{x.win.replace("-", "–")}</span>
+                    </button>
+                  ))}
+                </div>
                 {sessions.includes("Custom") && (
                   <div className="mt-2 flex items-center gap-2 text-sm">
                     <span className="text-mute">{tzAbbr()}</span>
@@ -221,6 +252,14 @@ export default function Plan() {
               )}
             </Field>
             <Field label="Notes"><textarea className="input min-h-16" maxLength={4000} value={draft.notes ?? ""} onChange={(e) => set("notes", e.target.value)} /></Field>
+            <div>
+              <div className="label mb-1.5">Chart screenshots</div>
+              {socialDb ? (
+                <ShotGallery uid={auth.user.id} folder={`plans/${date}`} paths={draft.images ?? []} onChange={savePlanImages} />
+              ) : (
+                <p className="text-xs text-mute">Screenshots for plans need database update 0006.</p>
+              )}
+            </div>
             {err && <p className="text-sm text-down">{err}</p>}
             <div className="flex items-center justify-end gap-3">
               <span className="text-xs text-mute">{saved === "saved" ? "Saved" : saved === "saving" ? "Saving…" : ""}</span>

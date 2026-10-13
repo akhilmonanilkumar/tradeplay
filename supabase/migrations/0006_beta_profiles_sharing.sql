@@ -255,6 +255,8 @@ create or replace function public.put_shared_brief(p_date date, p_kind text, p_c
 returns void language plpgsql security definer set search_path = '' as $$
 begin
   if auth.uid() is null then raise exception 'not signed in'; end if;
+  if jsonb_typeof(p_content) <> 'object' or length(p_content::text) > 20000 then raise exception 'invalid outlook'; end if;
+  if p_date not between current_date - 1 and current_date + 1 then raise exception 'invalid date'; end if;
   if exists (select 1 from public.shared_briefs where brief_date = p_date and kind = p_kind)
      and not exists (select 1 from public.brief_refreshes where user_id = auth.uid() and brief_date = p_date) then
     raise exception 'today''s outlook already exists';

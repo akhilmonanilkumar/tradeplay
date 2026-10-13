@@ -1,5 +1,5 @@
 /** Condensed A+ playbook — always in the coach's context. Full text: docs/trading-playbook.md (and the knowledgebase). */
-export const PLAYBOOK = `A+ PLAYBOOK (XAUUSD on FundedHive 25K · BTCUSDT.P on Breakout 5K funded). Source: Brad Go "Market Mechanics" lessons.
+export const PLAYBOOK = `A+ PLAYBOOK (built for XAUUSD and BTC perpetuals; the same rules apply to any liquid instrument). Source: Brad Go "Market Mechanics" lessons.
 Goal: max 1–2 A+ trades per account per day. Minimum R:R 1:3 to a REAL structural target (never stretch TP). If any box fails → no trade.
 
 PRE-MARKET: economic calendar (no entries ±15 min of high-impact news; wait 30–60 min after) · HTF range from the latest BOS (4H BTC, 1H gold) · premium/discount fib: longs only below 50%, shorts only above, mid-range = no trade · liquidity: PDH/PDL, equal highs/lows, decide the magnet · narrative (continuation/pullback) + written invalidation "bias wrong if price closes and holds beyond ___" · 15M POIs aligned with trend, in the correct half, with a liquidity story; draw from the extreme · set alerts, walk away until price is INSIDE a POI.

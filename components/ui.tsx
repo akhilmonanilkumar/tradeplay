@@ -118,7 +118,7 @@ export function Chips({ options, value, onChange }: { options: string[]; value: 
   );
 }
 
-export function Modal({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; footer?: React.ReactNode }) {
+export function Modal({ open, onClose, title, children, footer, size = "md" }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; footer?: React.ReactNode; size?: "sm" | "md" | "lg" }) {
   const [drag, setDrag] = useState(0);
   const startY = useRef<number | null>(null);
   useEffect(() => {
@@ -145,7 +145,7 @@ export function Modal({ open, onClose, title, children, footer }: { open: boolea
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={onClose} role="dialog" aria-modal aria-label={title}>
       <div
-        className="card sheet-in flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-b-none shadow-2xl sm:max-h-[88vh] sm:rounded-[22px]"
+        className={`card sheet-in flex max-h-[92dvh] w-full ${size === "sm" ? "max-w-md" : size === "lg" ? "max-w-3xl" : "max-w-2xl"} flex-col overflow-hidden rounded-b-none shadow-2xl sm:max-h-[88vh] sm:rounded-[22px]`}
         style={drag ? { transform: `translateY(${drag}px)`, transition: "none" } : undefined}
         onClick={(e) => e.stopPropagation()}
       >

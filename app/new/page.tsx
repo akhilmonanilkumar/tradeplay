@@ -6,10 +6,11 @@ import { useRouter } from "next/navigation";
 import { useData } from "@/components/Shell";
 import { Badge, Card, Check, Chips, Field, MobileBar, PageHead, Segmented, numOrNull } from "@/components/ui";
 import VoiceButton from "@/components/Voice";
+import { ShotPicker, uploadShot } from "@/components/Shots";
 import { ActionChips, Markdown, Sparkle } from "@/components/coach-ui";
 import { supabase } from "@/lib/supabase";
 import {
-  accountState, feeShare, fmtUsd, levelsValid, newsBlock, positionSize, roundSize, rr, sessionAt, todayIST, windowOpen, windowLabel,
+  accountState, feeShare, fmtUsd, levelsValid, newsBlock, positionSize, rLevel, roundSize, rr, sessionAt, todayIST, windowOpen, windowLabel,
 } from "@/lib/calc";
 import { matchLessons, parseDictation } from "@/lib/analysis";
 import { tzAbbr } from "@/lib/tz";
@@ -27,7 +28,7 @@ function localInput(d: Date) {
 
 export default function NewTrade() {
   const router = useRouter();
-  const { accounts, setups, trades, payouts, plans, refresh, adjustments, lessons, coachDb } = useData();
+  const { accounts, setups, trades, payouts, plans, refresh, adjustments, lessons, coachDb, session: auth } = useData();
   const coach = useCoachStatus();
   const active = accounts.filter((a) => a.status === "active");
   const [accountId, setAccountId] = useState(active[0]?.id ?? "");
@@ -41,6 +42,9 @@ export default function NewTrade() {
   const [sl, setSl] = useState("");
   const [tp, setTp] = useState("");
   const [riskInput, setRiskInput] = useState("");
+  const [riskMode, setRiskMode] = useState<"plan" | "pct" | "usd">("plan");
+  const [riskPctInput, setRiskPctInput] = useState("");
+  const [shots, setShots] = useState<File[]>([]);
   const [sizeInput, setSizeInput] = useState("");
   const [invalidation, setInvalidation] = useState("");
   const [chart, setChart] = useState("");
@@ -122,7 +126,16 @@ export default function NewTrade() {
   const valid = e != null && s != null && t != null && levelsValid(direction, e, s, t);
   const ratio = valid ? rr(e!, s!, t!) : 0;
   const planned = state?.riskUsd ?? 0;
-  const risk = numOrNull(riskInput) ?? planned;
+  const pctRisk = numOrNull(riskPctInput);
+  const risk =
+    riskMode === "usd" ? numOrNull(riskInput) ?? planned
+    : riskMode === "pct" ? (pctRisk != null && state ? Math.round(state.equity * pctRisk) / 100 : planned)
+    : planned;
+  const digits = acct && /XAU|GOLD/i.test(acct.instrument) ? 2 : acct && /BTC|ETH/i.test(acct.instrument) ? 1 : 5;
+  const px = (n: number) => Number(n.toFixed(digits));
+  const openRisk = trades.filter((x) => x.account_id === accountId && x.status === "open").reduce((n, x) => n + (x.risk_usd || 0), 0);
+  const roomDaily = state ? Math.max(0, Math.min(state.equity - state.personalStop, state.dailyBuffer) - openRisk) : 0;
+  const roomFloor = state ? Math.max(0, state.floorBuffer - openRisk) : 0;
   const calcSize = valid && acct ? roundSize(acct.instrument, positionSize(acct, e!, s!, risk)) : 0;
   const size = numOrNull(sizeInput) ?? calcSize;
   const fees = valid && acct ? feeShare(acct, e!, s!) : 0;
@@ -138,9 +151,11 @@ export default function NewTrade() {
     if (plan?.bias && plan.bias !== "neutral" && plan.bias !== direction) out.push(`Against today's ${plan.bias} bias`);
     if (plan?.bias === "neutral") out.push("Plan says stand aside today");
     if (risk > planned * 1.05 && planned > 0) out.push(`Risk ${fmtUsd(risk)} above plan ${fmtUsd(planned)}`);
+    if (!backfill && state?.canTrade && risk > roomDaily + 0.01) out.push(`A stop-out (${fmtUsd(risk)}) would break your daily stop — room left ${fmtUsd(roomDaily)}`);
+    if (!backfill && state?.canTrade && risk > roomFloor + 0.01) out.push(`Risk exceeds the max-drawdown buffer (${fmtUsd(roomFloor)})`);
     if (!gateOk) out.push(`A+ gate ${gateScore}/8${!rrOk && valid ? ` (R:R ${ratio} < ${minRr})` : ""}`);
     return out;
-  }, [backfill, state, news, plan, direction, risk, planned, gateOk, gateScore, rrOk, valid, ratio, minRr]);
+  }, [backfill, state, news, plan, direction, risk, planned, gateOk, gateScore, rrOk, valid, ratio, minRr, roomDaily, roomFloor]);
 
   const mentalWarn = useMemo(() => {
     const w: string[] = [];
@@ -175,7 +190,7 @@ export default function NewTrade() {
     if (!acct || !valid) return;
     setBusy(true);
     setErr(null);
-    const { error } = await supabase.from("trades").insert({
+    const { data: row, error } = await supabase.from("trades").insert({
       account_id: acct.id,
       setup_id: setupId || null,
       status,
@@ -200,9 +215,16 @@ export default function NewTrade() {
       emotions: feelings.filter((f) => ["Calm", "Confident", "Hesitant", "FOMO", "Revenge", "Overconfident", "Tired"].includes(f)),
       ...(coachDb ? { mental, emotion_log: feelings.length || Object.keys(mental).length ? [{ at: new Date().toISOString(), stage: "pre", emotions: feelings }] : [] } : {}),
       ...gate,
-    });
+    }).select("id").single();
+    if (error) {
+      setBusy(false);
+      return setErr(error.message);
+    }
+    if (shots[0] && row?.id) {
+      const up = await uploadShot(auth.user.id, row.id, shots[0]);
+      if (up.path) await supabase.from("trades").update({ before_path: up.path }).eq("id", row.id);
+    }
     setBusy(false);
-    if (error) return setErr(error.message);
     await refresh();
     router.push(status === "closed" ? "/trades" : "/");
   }
@@ -217,7 +239,7 @@ export default function NewTrade() {
         action={
           <div className="flex flex-wrap items-center gap-2">
             <VoiceButton label="Dictate trade" autoStart={autoVoice} onInterim={setHeard} onText={fromVoice} />
-            <Segmented value={accountId} onChange={(v) => { setAccountId(v); setRiskInput(""); setSizeInput(""); }} options={active.map((a) => ({ value: a.id, label: `${a.instrument}` }))} />
+            <Segmented value={accountId} onChange={(v) => { setAccountId(v); setRiskInput(""); setRiskPctInput(""); setSizeInput(""); }} options={active.map((a) => ({ value: a.id, label: `${a.instrument}` }))} />
           </div>
         }
       />
@@ -267,7 +289,7 @@ export default function NewTrade() {
             </div>
           </Card>
 
-          <Card title="Levels & size">
+          <Card title="Levels & risk" action={valid ? <Badge tone={rrOk ? "up" : "down"}>1:{ratio}</Badge> : undefined}>
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
               <Field label="Entry"><input className="input num" inputMode="decimal" value={entry} onChange={(ev) => setEntry(ev.target.value)} /></Field>
               <Field label="Stop"><input className="input num" inputMode="decimal" value={sl} onChange={(ev) => setSl(ev.target.value)} /></Field>
@@ -276,22 +298,74 @@ export default function NewTrade() {
             {entry && sl && tp && !valid && (
               <p className="mt-2 text-xs text-down">For a {direction}, SL must be {direction === "long" ? "below" : "above"} entry and TP {direction === "long" ? "above" : "below"}.</p>
             )}
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Field label="Risk $" hint={`Plan: ${fmtUsd(planned)} (${state.riskPct}%)`}>
-                <input className="input num" inputMode="decimal" placeholder={planned.toFixed(2)} value={riskInput} onChange={(ev) => setRiskInput(ev.target.value)} />
-              </Field>
-              <Field label={/XAU/i.test(acct.instrument) ? "Lots" : "Quantity"} hint={valid ? `Calculated ${calcSize}` : "Enter levels"}>
+            {e != null && s != null && e !== s && (direction === "long" ? s < e : s > e) && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-mute">Target at</span>
+                {[minRr, Math.max(minRr + 1, 4), 5].filter((v, k, arr) => arr.indexOf(v) === k).map((r) => (
+                  <button key={r} type="button" className="chip h-8 px-2.5 hover:border-chart/50 hover:text-ink" onClick={() => setTp(String(px(rLevel(direction, e, s, r))))}>
+                    {r}R · <span className="num">{px(rLevel(direction, e, s, r))}</span>
+                  </button>
+                ))}
+                <span className="text-[11px] text-mute">Only if a real structural level sits there.</span>
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+              <span className="label">Risk per trade</span>
+              <Segmented size="xs" value={riskMode} onChange={setRiskMode} options={[{ value: "plan", label: `Auto ${state.riskPct}%` }, { value: "pct", label: "% equity" }, { value: "usd", label: "$ amount" }]} />
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {riskMode === "pct" ? (
+                <Field label="Risk %" hint={`= ${fmtUsd(risk)} of ${fmtUsd(state.equity)}`}>
+                  <input className="input num" inputMode="decimal" placeholder={String(state.riskPct)} value={riskPctInput} onChange={(ev) => setRiskPctInput(ev.target.value)} />
+                </Field>
+              ) : riskMode === "usd" ? (
+                <Field label="Risk $" hint={`Plan: ${fmtUsd(planned)} (${state.riskPct}%)`}>
+                  <input className="input num" inputMode="decimal" placeholder={planned.toFixed(2)} value={riskInput} onChange={(ev) => setRiskInput(ev.target.value)} />
+                </Field>
+              ) : (
+                <div className="rounded-xl border border-chart/30 bg-chart/5 px-3 py-2">
+                  <div className="label">Risk (ladder)</div>
+                  <div className="num mt-0.5 text-lg font-semibold">{fmtUsd(planned)}</div>
+                  <div className="text-[11px] text-mute">{state.riskPct}% · {state.lossStreak ? "loss-streak cut" : "from your equity tier"}</div>
+                </div>
+              )}
+              <Field label={/XAU/i.test(acct.instrument) ? "Lots" : /^[A-Z]{6}$/.test(acct.instrument) && !/BTC|ETH/.test(acct.instrument) ? "Lots" : "Quantity"} hint={valid ? `Calculated ${calcSize}` : "Enter levels"}>
                 <input className="input num" inputMode="decimal" placeholder={calcSize ? String(calcSize) : ""} value={sizeInput} onChange={(ev) => setSizeInput(ev.target.value)} />
               </Field>
-              <div className="hidden rounded-xl border border-line p-3 sm:block">
+              <div className="col-span-2 rounded-xl border border-line p-3 sm:col-span-1">
                 <div className="label">R:R</div>
                 <div className={`num mt-1 text-2xl font-semibold ${!valid ? "text-mute" : rrOk ? "text-up" : "text-down"}`}>{valid ? `1:${ratio}` : "—"}</div>
                 <div className="text-[11px] text-mute">min 1:{minRr}{valid ? ` · reward ${fmtUsd(risk * ratio)}` : ""}</div>
               </div>
             </div>
+
+            {valid && (
+              <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line text-xs sm:grid-cols-4">
+                {[
+                  { k: "Stop distance", v: `${px(Math.abs(e! - s!))} · ${((Math.abs(e! - s!) / e!) * 100).toFixed(2)}%` },
+                  { k: "Max loss incl. fees", v: fmtUsd(risk), tone: "text-down" },
+                  { k: "+1R / +2R", v: `${px(rLevel(direction, e!, s!, 1))} / ${px(rLevel(direction, e!, s!, 2))}` },
+                  { k: "Notional", v: fmtUsd((size || 0) * acct.contract_size * e!) },
+                  { k: "Room to daily stop", v: fmtUsd(roomDaily), tone: risk > roomDaily ? "text-down" : "" },
+                  { k: "Equity if stopped", v: fmtUsd(state.equity - risk) },
+                  { k: "Fees of stop-out", v: `${(fees * 100).toFixed(0)}%`, tone: fees > 0.17 ? "text-warn" : "" },
+                  { k: "Open risk", v: fmtUsd(openRisk), tone: openRisk ? "text-warn" : "" },
+                ].map((x) => (
+                  <div key={x.k} className="bg-panel px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wide text-mute">{x.k}</div>
+                    <div className={`num mt-0.5 text-[13px] font-medium ${x.tone ?? ""}`}>{x.v}</div>
+                  </div>
+                ))}
+              </div>
+            )}
             {valid && fees > 0.17 && (
               <p className="mt-2 text-xs text-warn">Fees are {(fees * 100).toFixed(0)}% of this stop-out. Widen to ≥0.4% of price or skip.</p>
             )}
+            <div className="mt-4">
+              <div className="label mb-1.5">Before screenshot</div>
+              <ShotPicker files={shots} onChange={setShots} label="Entry chart" />
+            </div>
           </Card>
 
           <Card title={`A+ gate · ${gateScore}/8`} action={gateOk ? <Badge tone="up">✓ A+</Badge> : <Badge tone="warn">Not A+</Badge>}>

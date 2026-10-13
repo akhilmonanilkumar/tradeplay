@@ -1,6 +1,6 @@
 "use client";
 
-import { getTimeZone } from "@/lib/tz";
+import { getTimeZone, tzAbbr } from "@/lib/tz";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useData } from "@/components/Shell";
@@ -278,13 +278,20 @@ export function OutlookCard() {
   const { accounts, plans, coachDb } = useData();
   const [res, setRes] = useState<(CoachResult & Outlook) | null>(null);
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
 
   const run = async (refresh = false) => {
     setBusy(true);
-    const r = (await askCoach("outlook", { refresh })) as CoachResult & Outlook;
-    setRes(r);
+    setNote(null);
+    const r = (await askCoach("outlook", { refresh })) as CoachResult & Outlook & { refreshUsed?: boolean; shared?: boolean };
+    // A refused refresh keeps the current outlook on screen.
+    if (refresh && r.error && res && !res.error) {
+      setNote(String(r.error));
+      setRes({ ...res, refreshUsed: true } as typeof res);
+    } else setRes(r);
     setBusy(false);
   };
+  const used = !!(res as { refreshUsed?: boolean } | null)?.refreshUsed;
   useEffect(() => {
     if (status?.enabled && coachDb && !res) run(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -298,8 +305,16 @@ export function OutlookCard() {
         <h2 className="flex items-center gap-2 text-sm font-semibold"><Sparkle className="h-4 w-4 text-chart" /> Today's outlook — our way</h2>
         {status?.enabled && coachDb && (
           <div className="flex items-center gap-2 text-xs text-mute">
-            {res?.created_at ? <span>{res.cached ? "Generated" : "Updated"} {fmtIST(String(res.created_at), false)}</span> : null}
-            <button className="btn-ghost h-8 min-h-0 text-xs" onClick={() => run(true)} disabled={busy}>{busy ? "Thinking…" : "Refresh"}</button>
+            {res?.created_at ? <span className="num">{(res as { shared?: boolean }).shared ? "Shared · " : ""}{fmtIST(String(res.created_at), false)} {tzAbbr()}</span> : null}
+            <button
+              className={`grid h-8 w-8 place-items-center rounded-full border border-line transition hover:bg-raised hover:text-ink disabled:opacity-40 ${busy ? "animate-spin" : ""}`}
+              onClick={() => run(true)}
+              disabled={busy || used}
+              aria-label={used ? "Refresh used for today" : "Refresh the outlook (once a day)"}
+              title={used ? "You've used today's refresh" : "Refresh now — once per day"}
+            >
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5" /></svg>
+            </button>
           </div>
         )}
       </div>
@@ -348,7 +363,8 @@ export function OutlookCard() {
           {asList(res.calendar).length > 0 && <List title="Calendar" items={asList(res.calendar)} />}
           {res.reply && !Array.isArray(res.instruments) && <Markdown text={asText(res.reply)} />}
           <ActionChips actions={res.actions} />
-          <p className="text-[11px] text-mute">Scenarios, not predictions — built from your playbook, knowledgebase, public prices and headlines. Confirm every level on your own chart.</p>
+          {note && <p className="text-xs text-warn">{note}</p>}
+          <p className="text-[11px] text-mute">One AI outlook shared by every trader, built from the A+ playbook, public prices, headlines and the economic calendar (times in UTC). Scenarios, not predictions — confirm every level on your own chart. You can refresh it once a day.</p>
         </div>
       ) : null}
       {status && !status.enabled && <CoachSetupNote compact />}

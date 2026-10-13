@@ -10,6 +10,7 @@ import { accountState, disciplineScore, fmtIST, fmtR, fmtUsd, msToWindow, sessio
 import { scoreAxes, streaks } from "@/lib/analysis";
 import { nudges } from "@/lib/nudges";
 import { quoteOfDay } from "@/lib/quotes";
+import { useMarket } from "@/components/Market";
 import { riskWindows } from "@/lib/events";
 import type { Trade } from "@/lib/types";
 import type { EconEvent } from "@/components/Market";
@@ -25,11 +26,15 @@ const short = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-I
 /* ---------------- greeting + quote ---------------- */
 
 export function Greeting({ now, onStart }: { now: Date; onStart: () => void }) {
-  const { session } = useData();
-  const name = (session.user.user_metadata?.name as string | undefined)?.trim();
+  const { session, profile } = useData();
+  const market = useMarket();
+  const name = profile?.display_name?.trim() || (session.user.user_metadata?.name as string | undefined)?.trim();
   const h = Number(fmtIST(now, false).slice(0, 2));
   const part = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
-  const { quote, principle } = quoteOfDay(todayIST(now));
+  const local = quoteOfDay(todayIST(now));
+  const zen = market.data?.quote;
+  const quote = zen ? { text: zen.text, by: zen.by, note: undefined } : local.quote;
+  const principle = local.principle;
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -47,6 +52,7 @@ export function Greeting({ now, onStart }: { now: Date; onStart: () => void }) {
         <div className="min-w-0 flex-1">
           <p className="text-[15px] font-medium leading-snug">“{quote.text}” <span className="font-normal text-mute">— {quote.by}{quote.note ? ` (${quote.note})` : ""}</span></p>
           <p className="mt-1 text-xs text-mute"><span className="font-medium text-ink">A+ principle:</span> {principle}</p>
+          {zen && <p className="mt-1 text-[10px] text-mute/80">Quote provided by <a href="https://zenquotes.io/" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">ZenQuotes API</a></p>}
         </div>
       </section>
     </div>
@@ -249,7 +255,7 @@ export function StatusCard({ now }: { now: Date }) {
         {states.map(({ a, s }) => (
           <li key={a.id} className="flex items-center justify-between gap-2">
             <span className="truncate text-[#C7CBD2]">{a.instrument}</span>
-            <span className={`num ${s.canTrade ? "text-[#34D399]" : "text-[#FB7185]"}`}>{s.canTrade ? `${s.tradesLeft} left · ${fmtUsd(s.riskUsd)}` : "locked"}</span>
+            <span className={`num ${s.canTrade ? "text-[#34D399]" : s.reasons.every((r) => r.startsWith("Outside your")) ? "text-[#C7CBD2]" : "text-[#FB7185]"}`}>{s.canTrade ? `${s.tradesLeft} left · ${fmtUsd(s.riskUsd)}` : s.reasons.every((r) => r.startsWith("Outside your")) ? "off-session" : "done today"}</span>
           </li>
         ))}
       </ul>

@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmDialog } from "@/components/Dialogs";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useData } from "@/components/Shell";
@@ -57,6 +58,68 @@ function Shot({ path, label, onUpload }: { path: string | null; label: string; o
         </label>
       )}
       <span className="absolute left-2 top-2 rounded bg-bg/80 px-1.5 py-0.5 text-[10px]">{label}</span>
+    </div>
+  );
+}
+
+/** Public link for a trade: create/revoke, copy, native share, post to X. */
+function SharePanel({ trade }: { trade: Trade }) {
+  const { refresh, socialDb, profile, openProfile } = useData();
+  const [id, setId] = useState<string | null>(trade.share_id ?? null);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => setId(trade.share_id ?? null), [trade.share_id]);
+  if (!socialDb) return null;
+  const url = id && typeof window !== "undefined" ? `${window.location.origin}/t/${id}` : "";
+  const text = `${trade.direction === "long" ? "Long" : "Short"} ${trade.instrument}${trade.status === "closed" && trade.r_multiple != null ? ` · ${fmtR(trade.r_multiple)}` : ""} — verified on A+ TradePlay`;
+  async function toggle(on: boolean) {
+    setBusy(true);
+    setErr(null);
+    const next = on ? crypto.randomUUID() : null;
+    const { error } = await supabase.from("trades").update({ share_id: next }).eq("id", trade.id);
+    setBusy(false);
+    if (error) return setErr(error.message);
+    setId(next);
+    refresh();
+  }
+  return (
+    <div className="mb-4 rounded-2xl border border-line p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="flex items-center gap-2 text-sm font-medium">
+          <svg viewBox="0 0 24 24" className="h-4 w-4 text-chart" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v14" /></svg>
+          Share this trade
+        </span>
+        {id ? (
+          <button className="text-xs text-mute hover:text-down" disabled={busy} onClick={() => toggle(false)}>Stop sharing</button>
+        ) : (
+          <button className="btn-ghost h-8 min-h-0 px-3 text-xs" disabled={busy} onClick={() => toggle(true)}>{busy ? "Creating…" : "Create public link"}</button>
+        )}
+      </div>
+      {id ? (
+        <>
+          <div className="mt-2 flex items-center gap-2 rounded-xl bg-raised px-3 py-2 text-xs">
+            <span className="num min-w-0 flex-1 truncate">{url.replace(/^https?:\/\//, "")}</span>
+            <button className="shrink-0 font-medium text-accent" onClick={async () => { await navigator.clipboard?.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>{copied ? "Copied" : "Copy"}</button>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {typeof navigator !== "undefined" && "share" in navigator && (
+              <button className="chip h-8 px-3 text-xs" onClick={() => navigator.share({ title: text, url }).catch(() => {})}>Share…</button>
+            )}
+            <a className="chip h-8 px-3 text-xs" target="_blank" rel="noopener noreferrer" href={`https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`}>Post on X</a>
+            <a className="chip h-8 px-3 text-xs" target="_blank" rel="noopener noreferrer" href={`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`}>Telegram</a>
+            <a className="chip h-8 px-3 text-xs" target="_blank" rel="noopener noreferrer" href={`https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`}>WhatsApp</a>
+            <a className="chip h-8 px-3 text-xs" target="_blank" rel="noopener noreferrer" href={url}>Preview ↗</a>
+          </div>
+          <p className="mt-2 text-[11px] text-mute">
+            Shows levels, R and the A+ gate with a verified badge — never your account, balance or notes{profile?.show_usd ? "; $ P&L is shown (profile setting)" : ""}.
+            {!profile?.is_public && <> Your name appears once your profile is public — <button className="text-accent" onClick={openProfile}>edit profile</button>.</>}
+          </p>
+        </>
+      ) : (
+        <p className="mt-1 text-[11px] text-mute">Creates a read-only link with a preview card for X, Telegram, WhatsApp and more.</p>
+      )}
+      {err && <p className="mt-1 text-xs text-down">{err}</p>}
     </div>
   );
 }
@@ -142,7 +205,7 @@ export default function TradeModal({ trade, onClose }: { trade: Trade | null; on
   }
 
   async function remove() {
-    if (!confirm("Delete this trade permanently? Screenshots are removed too.")) return;
+    if (!(await confirmDialog({ title: "Delete this trade?", body: "It is removed permanently, with its screenshots and share link.", danger: true }))) return;
     const files = [paths.before, paths.after].filter(Boolean) as string[];
     if (files.length) await supabase.storage.from("screenshots").remove(files);
     const { error } = await supabase.from("trades").delete().eq("id", trade!.id);
@@ -196,6 +259,7 @@ export default function TradeModal({ trade, onClose }: { trade: Trade | null; on
         ))}
       </div>
 
+      <SharePanel key={`sh-${trade.id}`} trade={trade} />
       <div className="mb-4"><TradeDiagnosis key={trade.id + trade.status} trade={trade} /></div>
 
       <div className="grid grid-cols-3 gap-2 sm:gap-3">

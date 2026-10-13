@@ -77,6 +77,8 @@ export type Trade = {
   emotion_log?: EmotionEntry[];
   /** Pre-trade mental state ratings 1–5. */
   mental?: MentalState;
+  /** Public share token (migration 0006); null = not shared. */
+  share_id?: string | null;
   created_at: string;
 };
 
@@ -136,8 +138,10 @@ export type DayPlan = {
   notes: string | null;
   /** Sessions chosen for this day; empty = use the account default. */
   sessions?: SessionName[];
-  /** IST "HH:MM-HH:MM" used when sessions include "Custom". */
+  /** Local "HH:MM-HH:MM" (trader's time zone) used when sessions include "Custom". */
   custom_window?: string | null;
+  /** Storage paths of chart screenshots for the plan (migration 0006). */
+  images?: string[];
 };
 
 export type SessionName = "Asia" | "London" | "New York" | "Any" | "Custom";

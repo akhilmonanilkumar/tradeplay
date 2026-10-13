@@ -3,8 +3,10 @@ import "server-only";
 /**
  * Public market context for BTC and gold — fetched server-side, cached 5–15 min, no API keys.
  *  - Prices: Kraken public ticker (XBTUSD, PAXGUSD ≈ 1 oz gold), CoinGecko as fallback
- *  - Headlines: RSS (CoinDesk, Cointelegraph, FXStreet) — override with NEWS_FEEDS="url1,url2"
- *  - Economic calendar: Forex Factory weekly JSON (faireconomy mirror)
+ *  - Headlines: Finnhub market news API (FINNHUB_API_KEY, free tier) — one vetted aggregator of
+ *    Reuters/CNBC/MarketWatch etc.; without a key, the FXStreet publisher RSS feed (or NEWS_FEEDS) is used
+ *  - Economic calendar: Forex Factory weekly JSON export (nfs.faireconomy.media)
+ *  - Quote of the day: ZenQuotes /api/today (free, attribution required), local list as fallback
  */
 
 export type Quote = { symbol: "BTC" | "XAU"; label: string; price: number | null; changePct: number | null; source: string };
@@ -57,11 +59,7 @@ export async function quotes(): Promise<Quote[]> {
   return out;
 }
 
-const DEFAULT_FEEDS = [
-  "https://www.coindesk.com/arc/outboundfeeds/rss/",
-  "https://cointelegraph.com/rss",
-  "https://www.fxstreet.com/rss/news",
-];
+const DEFAULT_FEEDS = ["https://www.fxstreet.com/rss/news"];
 
 const decode = (s: string) =>
   s
@@ -104,8 +102,44 @@ async function feed(url: string): Promise<Headline[]> {
   }
 }
 
+type FinnhubItem = { category?: string; datetime?: number; headline?: string; source?: string; url?: string; summary?: string };
+
+/** Finnhub market news (general + forex + crypto). Free key: finnhub.io → Dashboard. */
+async function finnhub(key: string): Promise<Headline[]> {
+  const cats = ["general", "forex", "crypto"];
+  const lists = await Promise.all(
+    cats.map(async (c) => {
+      try {
+        const r = await fetch(`https://finnhub.io/api/v1/news?category=${c}`, { headers: { ...UA, "X-Finnhub-Token": key }, next: { revalidate: 600 }, signal: AbortSignal.timeout(8000) });
+        return r.ok ? ((await r.json()) as FinnhubItem[]) : [];
+      } catch {
+        return [];
+      }
+    }),
+  );
+  return lists.flatMap((list, i) =>
+    (Array.isArray(list) ? list : []).slice(0, 60).flatMap((n) => {
+      const title = decode(String(n.headline ?? "")).slice(0, 220);
+      const link = String(n.url ?? "");
+      if (!title || !/^https:\/\//.test(link)) return [];
+      const tags = tagsFor(`${title} ${String(n.summary ?? "").slice(0, 300)}`);
+      if (cats[i] === "crypto" && !tags.includes("BTC") && /bitcoin|btc/i.test(title)) tags.push("BTC");
+      return [{ title, link, source: String(n.source ?? "Finnhub").slice(0, 40), at: n.datetime ? new Date(n.datetime * 1000).toISOString() : null, tags }];
+    }),
+  );
+}
+
 /** Latest relevant headlines (BTC, gold, macro), newest first, deduped. */
 export async function headlines(limit = 24): Promise<Headline[]> {
+  const key = process.env.FINNHUB_API_KEY?.trim();
+  if (key) {
+    const seen = new Set<string>();
+    const list = (await finnhub(key))
+      .filter((h) => h.tags.length && !seen.has(h.title.toLowerCase()) && seen.add(h.title.toLowerCase()))
+      .sort((a, b) => (b.at ?? "").localeCompare(a.at ?? ""))
+      .slice(0, limit);
+    if (list.length) return list;
+  }
   const urls = (process.env.NEWS_FEEDS ?? "").split(",").map((s) => s.trim()).filter((s) => /^https:\/\//.test(s));
   const all = (await Promise.all((urls.length ? urls : DEFAULT_FEEDS).map(feed))).flat();
   const seen = new Set<string>();
@@ -131,4 +165,16 @@ export async function calendar(): Promise<EconEvent[]> {
       previous: String(e.previous ?? ""),
     }))
     .sort((a: EconEvent, b: EconEvent) => a.at.localeCompare(b.at));
+}
+
+export type DayQuote = { text: string; by: string; source: "ZenQuotes" };
+
+/** Today's quote from ZenQuotes (cached 6h; their free tier allows 5 calls / 30 s and needs attribution). */
+export async function zenQuote(): Promise<DayQuote | null> {
+  const j = await getJson("https://zenquotes.io/api/today", 21600);
+  const q = Array.isArray(j) ? j[0] : null;
+  const text = typeof q?.q === "string" ? q.q.trim() : "";
+  const by = typeof q?.a === "string" ? q.a.trim() : "";
+  if (!text || !by || /too many requests|zenquotes\.io/i.test(text)) return null;
+  return { text: text.slice(0, 400), by: by.slice(0, 80), source: "ZenQuotes" };
 }

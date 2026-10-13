@@ -9,8 +9,9 @@ import { CheckinCard, DontRepeat, OutlookCard } from "@/components/TodayWidgets"
 import { tzAbbr } from "@/lib/tz";
 import { DailyPnl, Greeting, NextEventCard, OverallScore, PnlCurve, ScorePanel, StartDay, StatusCard, TodoList, TradesTable } from "@/components/TodayDash";
 import { EconWeek, MarketPanel, useMarket } from "@/components/Market";
+import SessionSlider from "@/components/SessionSlider";
 import {
-  accountState, fmtIST, fmtPct, fmtR, fmtUsd, msToWindow, newsBlock, sessionAt, todayIST, windowLabel,
+  accountState, fmtIST, fmtPct, fmtUsd, newsBlock, todayIST,
 } from "@/lib/calc";
 import type { Trade } from "@/lib/types";
 
@@ -23,11 +24,6 @@ function useNow(ms = 30000) {
   return now;
 }
 
-function fmtDur(ms: number) {
-  const m = Math.round(ms / 60000);
-  const h = Math.floor(m / 60);
-  return h ? `${h}h ${m % 60}m` : `${m}m`;
-}
 
 export default function Today() {
   const { accounts, trades, payouts, plans, adjustments } = useData();
@@ -36,7 +32,6 @@ export default function Today() {
   const [edit, setEdit] = useState<Trade | null>(null);
   const [startDay, setStartDay] = useState(false);
   const active = accounts.filter((a) => a.status === "active");
-  const session = sessionAt(now);
   const open = trades.filter((t) => t.status === "open");
   const today = todayIST(now);
   const states = useMemo(
@@ -55,6 +50,7 @@ export default function Today() {
   return (
     <>
       <Greeting now={now} onStart={() => setStartDay(true)} />
+      <div className="mb-5 mt-4"><SessionSlider now={now} newsTimes={[...new Set(states.flatMap((x) => x.plan?.news_times ?? []))]} /></div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px] xl:grid-rows-[auto_1fr]">
         {/* Phones: what to do now comes first; desktop: right rail */}
@@ -76,8 +72,8 @@ export default function Today() {
         {states.map(({ a, plan, s }) => {
           const news = newsBlock(plan, now);
           const planDone = plan && Object.values(plan.checklist ?? {}).filter(Boolean).length >= 6;
-          const wait = msToWindow(a, now, plan);
-          const blocked = !s.canTrade || !!news;
+          const windowOnly = s.reasons.length > 0 && s.reasons.every((r) => r.startsWith("Outside your"));
+          const otherReasons = s.reasons.filter((r) => !r.startsWith("Outside your"));
           const rangeToFloor = s.equity - s.floor;
           const totalRoom = a.starting_balance - s.floor;
           return (
@@ -90,7 +86,10 @@ export default function Today() {
                 </span>
               }
               action={
-                blocked ? <Badge tone="down">⛔ Locked</Badge> : <Badge tone="up">● Clear to trade</Badge>
+                news ? <Badge tone="down">News block</Badge>
+                : otherReasons.length ? <Badge tone="down">Done for today</Badge>
+                : windowOnly ? <Badge>◐ Off-session</Badge>
+                : <Badge tone="up">● Clear to trade</Badge>
               }
             >
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-2 2xl:grid-cols-4">
@@ -133,12 +132,9 @@ export default function Today() {
                   </Link>
                 )}
                 {news && <div className="rounded-lg border border-down/30 bg-down/5 px-3 py-2 text-down">News block: {news} {tzAbbr()} ±15 min</div>}
-                {s.reasons.map((r) => (
+                {otherReasons.map((r) => (
                   <div key={r} className="rounded-lg border border-line px-3 py-2 text-mute">{r}</div>
                 ))}
-                {wait > 0 && (
-                  <div className="text-mute">{windowLabel(a, plan)} window opens in {fmtDur(wait)}</div>
-                )}
               </div>
             </Card>
           );

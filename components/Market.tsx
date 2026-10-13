@@ -12,7 +12,7 @@ import { Badge, Card, Segmented } from "@/components/ui";
 export type Quote = { symbol: "BTC" | "XAU"; label: string; price: number | null; changePct: number | null; source: string };
 export type Headline = { title: string; link: string; source: string; at: string | null; tags: ("BTC" | "XAU" | "MACRO")[] };
 export type EconEvent = { title: string; country: string; at: string; impact: "High" | "Medium" | "Low" | "Holiday"; forecast: string; previous: string };
-type MarketData = { quotes: Quote[]; headlines: Headline[]; events: EconEvent[]; at: string };
+type MarketData = { quotes: Quote[]; headlines: Headline[]; events: EconEvent[]; quote?: { text: string; by: string; source: string } | null; newsSource?: string; at: string };
 
 let cache: { at: number; p: Promise<MarketData | null> } | null = null;
 function loadMarket(force = false): Promise<MarketData | null> {
@@ -77,14 +77,23 @@ export function MarketPanel({ market }: { market: ReturnType<typeof useMarket> }
         ))}
         {!loading && news.length === 0 && <li className="py-3 text-sm text-mute">No headlines right now.</li>}
       </ul>
-      <p className="mt-2 text-[11px] text-mute">Gold price via PAXG (≈1 oz) — check your broker's quote before trading.</p>
+      <p className="mt-2 text-[11px] text-mute">Prices: Kraken public API (gold via PAXG ≈ 1 oz) · News: {data?.newsSource ?? "—"}. Check your broker's quote before trading.</p>
     </Card>
   );
 }
 
 const DAY = 86400000;
+const FLAG: Record<string, string> = { USD: "🇺🇸", EUR: "🇪🇺", GBP: "🇬🇧", JPY: "🇯🇵", CNY: "🇨🇳", AUD: "🇦🇺", CAD: "🇨🇦", CHF: "🇨🇭", NZD: "🇳🇿", All: "🌐" };
 
-/** Mon–Sun grid of this week's market-moving events with no-trade (±15m) and caution windows, in IST. */
+function until(ms: number) {
+  const m = Math.round(ms / 60000);
+  if (m < 0) return m > -60 ? "just out" : "out";
+  if (m < 60) return `in ${m}m`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `in ${h}h ${m % 60 ? `${m % 60}m` : ""}`.trim() : `in ${Math.round(h / 24)}d`;
+}
+
+/** This week's market-moving events: pick a day, see its events with no-trade and caution windows (your time zone). */
 export function EconWeek({ market }: { market: ReturnType<typeof useMarket> }) {
   const { accounts, plans, refresh, coachDb, reminders } = useData();
   const [filter, setFilter] = useState<"high" | "all">("high");
@@ -92,18 +101,21 @@ export function EconWeek({ market }: { market: ReturnType<typeof useMarket> }) {
   const events = market.data?.events ?? [];
   const now = new Date();
   const today = todayIST(now);
+  const [sel, setSel] = useState(today);
   const windows = useMemo(() => riskWindows(events), [events]);
   const live = activeWindow(windows, now);
 
-  const istDate = (iso: string) => todayIST(new Date(iso));
+  const localDate = (iso: string) => todayIST(new Date(iso));
   const monday = (() => {
     const d = new Date(`${today}T00:00:00Z`);
     const dow = (d.getUTCDay() + 6) % 7;
     return new Date(d.getTime() - dow * DAY);
   })();
   const days = Array.from({ length: 7 }, (_, i) => new Date(monday.getTime() + i * DAY).toISOString().slice(0, 10));
-  const shown = events.filter((e) => (filter === "all" ? e.impact !== "Low" : e.impact === "High"));
+  const shown = events.filter((e) => (filter === "all" ? e.impact === "High" || e.impact === "Medium" : e.impact === "High"));
   const todaysTimes = newsTimesFor(events, today);
+  const dayList = shown.filter((e) => localDate(e.at) === sel).sort((a, b) => a.at.localeCompare(b.at));
+  const nextUp = shown.find((e) => new Date(e.at).getTime() > now.getTime());
 
   async function addToPlans() {
     setMsg(null);
@@ -113,7 +125,7 @@ export function EconWeek({ market }: { market: ReturnType<typeof useMarket> }) {
       const { error } = await supabase.from("day_plans").upsert({ account_id: a.id, plan_date: today, news_times: merged }, { onConflict: "account_id,plan_date" });
       if (error) return setMsg(error.message);
     }
-    setMsg(`Added ${todaysTimes.join(", ")} ${tzAbbr()} to today's plans — entries blocked ±15 min.`);
+    setMsg(`Blocked ${todaysTimes.join(", ")} ${tzAbbr()} in today's plans — no entries ±15 min.`);
     refresh();
   }
   async function remind() {
@@ -129,81 +141,95 @@ export function EconWeek({ market }: { market: ReturnType<typeof useMarket> }) {
 
   return (
     <Card
-      title={`This week · economic calendar (${tzAbbr()})`}
+      title="Economic calendar"
       action={<Segmented size="xs" value={filter} onChange={setFilter} options={[{ value: "high", label: "High" }, { value: "all", label: "High + Med" }]} />}
     >
-      {live && (
-        <div className={`mb-3 rounded-lg px-3 py-2 text-sm ${live.kind === "no-trade" ? "bg-down/10 text-down" : "bg-warn/10 text-warn"}`}>
-          {live.kind === "no-trade" ? "No-trade window now" : "Caution window now"} — {live.event.title} ({fmtIST(new Date(live.from), false)}–{fmtIST(new Date(live.to), false)})
+      {live ? (
+        <div className={`mb-3 flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${live.kind === "no-trade" ? "bg-down/10 text-down" : "bg-warn/10 text-warn"}`}>
+          <span className="h-2 w-2 animate-pulse rounded-full bg-current" />
+          <span className="min-w-0 flex-1 truncate">{live.kind === "no-trade" ? "No-trade window" : "Caution window"} · {live.event.title}</span>
+          <span className="num shrink-0 text-xs">until {fmtIST(new Date(live.to), false)}</span>
         </div>
-      )}
-      {/* Phones: agenda list */}
-      <ul className="space-y-3 md:hidden">
+      ) : nextUp ? (
+        <div className="mb-3 flex items-center gap-2 rounded-xl bg-raised px-3 py-2 text-sm">
+          <span className="text-xs text-mute">Next</span>
+          <span className="min-w-0 flex-1 truncate">{FLAG[nextUp.country] ?? ""} {nextUp.title}</span>
+          <span className="num shrink-0 text-xs font-semibold">{until(new Date(nextUp.at).getTime() - now.getTime())}</span>
+        </div>
+      ) : null}
+
+      {/* Day picker */}
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" role="tablist" aria-label="Day">
         {days.map((d) => {
-          const list = shown.filter((e) => istDate(e.at) === d && new Date(e.at).getTime() > now.getTime() - 2 * 3600000);
-          if (!list.length) return null;
+          const list = shown.filter((e) => localDate(e.at) === d);
+          const high = list.filter((e) => e.impact === "High").length;
+          const med = list.length - high;
+          const on = d === sel;
+          const dt = new Date(`${d}T00:00:00Z`);
           return (
-            <li key={d}>
-              <div className={`mb-1.5 text-xs font-semibold ${d === today ? "text-accent" : "text-mute"}`}>
-                {d === today ? "Today" : new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" })}
+            <button
+              key={d}
+              role="tab"
+              aria-selected={on}
+              onClick={() => setSel(d)}
+              className={`flex min-w-[52px] flex-1 flex-col items-center rounded-2xl px-2 py-2 transition ${on ? "bg-ink text-bg" : d < today ? "text-mute/60 hover:bg-raised" : "hover:bg-raised"}`}
+            >
+              <span className={`text-[10px] font-medium uppercase tracking-wide ${on ? "" : "text-mute"}`}>{d === today ? "Today" : dt.toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" })}</span>
+              <span className="num text-base font-semibold">{dt.getUTCDate()}</span>
+              <span className="mt-0.5 flex h-1.5 items-center gap-0.5">
+                {Array.from({ length: Math.min(high, 4) }).map((_, i) => <span key={`h${i}`} className="h-1.5 w-1.5 rounded-full bg-down" />)}
+                {Array.from({ length: Math.min(med, 3 - Math.min(high, 3)) }).map((_, i) => <span key={`m${i}`} className="h-1.5 w-1.5 rounded-full bg-warn" />)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Events of the selected day */}
+      <ul className="mt-3 space-y-2">
+        {dayList.map((e) => {
+          const t = new Date(e.at).getTime();
+          const past = t < now.getTime() - 3600000;
+          const w = windows.find((x) => x.event === e && x.kind === "no-trade") ?? windows.find((x) => x.event === e);
+          return (
+            <li key={e.title + e.at} className={`flex gap-3 rounded-2xl border border-line p-3 ${past ? "opacity-50" : ""}`}>
+              <div className="w-14 shrink-0">
+                <div className="num text-[15px] font-semibold leading-tight">{fmtIST(e.at, false)}</div>
+                <div className="num mt-0.5 text-[11px] text-mute">{until(t - now.getTime())}</div>
               </div>
-              <ul className="space-y-1.5">
-                {list.map((e) => {
-                  const w = windows.find((x) => x.event === e && x.kind === "no-trade") ?? windows.find((x) => x.event === e);
-                  return (
-                    <li key={e.title + e.at} className="flex items-center gap-3 rounded-2xl bg-raised px-3 py-2.5">
-                      <span className="num w-12 shrink-0 text-sm font-semibold">{fmtIST(e.at, false)}</span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm">{e.country} · {e.title}</span>
-                        {w && <span className={`num block text-xs ${w.kind === "no-trade" ? "text-down" : "text-warn"}`}>{w.kind === "no-trade" ? "No entries" : "Caution"} {fmtIST(new Date(w.from), false)}–{fmtIST(new Date(w.to), false)}</span>}
-                      </span>
-                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${e.impact === "High" ? "bg-down" : "bg-warn"}`} aria-label={`${e.impact} impact`} />
-                    </li>
-                  );
-                })}
-              </ul>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start gap-2">
+                  <span className="min-w-0 flex-1 text-sm font-medium leading-snug">{e.title}</span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${e.impact === "High" ? "bg-down/15 text-down" : "bg-warn/15 text-warn"}`}>{e.impact}</span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-mute">
+                  <span>{FLAG[e.country] ?? ""} {e.country}</span>
+                  {e.forecast && <span>Forecast <b className="num font-medium text-ink">{e.forecast}</b></span>}
+                  {e.previous && <span>Prev <b className="num font-medium text-ink">{e.previous}</b></span>}
+                </div>
+                {w && (
+                  <div className={`num mt-1.5 inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-[11px] ${w.kind === "no-trade" ? "bg-down/10 text-down" : "bg-warn/10 text-warn"}`}>
+                    {w.kind === "no-trade" ? "No entries" : "Caution"} {fmtIST(new Date(w.from), false)}–{fmtIST(new Date(w.to), false)}
+                  </div>
+                )}
+              </div>
             </li>
           );
         })}
-        {!shown.some((e) => new Date(e.at).getTime() > now.getTime() - 2 * 3600000) && <li className="text-sm text-mute">No more {filter === "high" ? "high-impact " : ""}events this week.</li>}
+        {!market.loading && events.length > 0 && dayList.length === 0 && (
+          <li className="rounded-2xl border border-dashed border-line p-5 text-center text-sm text-mute">No {filter === "high" ? "high-impact " : ""}events — a clean day for price action.</li>
+        )}
       </ul>
 
-      <div className="-mx-1 hidden overflow-x-auto px-1 md:block">
-        <div className="grid min-w-[640px] grid-cols-7 gap-1.5">
-          {days.map((d) => {
-            const list = shown.filter((e) => istDate(e.at) === d);
-            const isToday = d === today;
-            return (
-              <div key={d} className={`min-h-28 rounded-xl border p-2 ${isToday ? "border-accent/50 bg-accent/5" : "border-line"}`}>
-                <div className={`mb-1.5 text-[11px] font-medium ${isToday ? "text-accent" : "text-mute"}`}>
-                  {new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", timeZone: "UTC" })}
-                </div>
-                <ul className="space-y-1">
-                  {list.map((e) => {
-                    const w = windows.find((x) => x.event === e && x.kind === "no-trade") ?? windows.find((x) => x.event === e);
-                    const past = new Date(e.at).getTime() < now.getTime() - 3600000;
-                    return (
-                      <li key={e.title + e.at} className={`rounded-md px-1.5 py-1 text-[11px] leading-tight ${e.impact === "High" ? "bg-down/10" : "bg-warn/10"} ${past ? "opacity-45" : ""}`} title={`${e.title}${e.forecast ? ` · f ${e.forecast} · p ${e.previous}` : ""}`}>
-                        <div className="num font-medium">{fmtIST(e.at, false)} <span className="text-mute">{e.country}</span></div>
-                        <div className="line-clamp-2">{e.title}</div>
-                        {w && <div className={`num mt-0.5 ${w.kind === "no-trade" ? "text-down" : "text-warn"}`}>{w.kind === "no-trade" ? "⛔" : "⚠"} {fmtIST(new Date(w.from), false)}–{fmtIST(new Date(w.to), false)}</div>}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
-      </div>
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-        <span className="hidden text-mute md:inline">⛔ no entries · ⚠ caution (wait 30–60 min after high impact)</span>
+        <span className="hidden text-mute md:inline">Times in {tzAbbr()} · no entries ±15 min · caution 30–60 min after</span>
         <span className="hidden flex-1 md:block" />
         {todaysTimes.length > 0 && <button className="btn-ghost h-10 min-h-0 flex-1 text-xs md:h-8 md:flex-none" onClick={addToPlans}>Block today's times</button>}
         {coachDb && <button className="btn-ghost h-10 min-h-0 flex-1 text-xs md:h-8 md:flex-none" onClick={remind}>Remind me before each</button>}
       </div>
       {msg && <p className="mt-2 text-xs text-up">{msg}</p>}
       {!market.loading && !events.length && <p className="text-sm text-mute">Calendar unavailable right now.</p>}
+      <p className="mt-2 text-[11px] text-mute">Source: Forex Factory weekly calendar.</p>
     </Card>
   );
 }

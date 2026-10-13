@@ -1,5 +1,6 @@
 "use client";
 
+import { confirmDialog } from "@/components/Dialogs";
 import { useEffect, useState } from "react";
 import { useData } from "@/components/Shell";
 import { Badge, Card, Field, MobileBar, Modal, PageHead, numOrNull } from "@/components/ui";
@@ -127,7 +128,7 @@ function AccountEditor({ account }: { account: Account }) {
   }
 
   async function delPayout(id: string) {
-    if (!confirm("Delete this payout?")) return;
+    if (!(await confirmDialog({ title: "Delete this payout?", body: "Equity and stats are recalculated without it.", danger: true }))) return;
     await supabase.from("payouts").delete().eq("id", id);
     refresh();
   }
@@ -136,7 +137,14 @@ function AccountEditor({ account }: { account: Account }) {
     <div id={account.id} className="scroll-mt-20">
     <Card
       title={<span className="flex items-center gap-2 normal-case tracking-normal"><span className="text-sm font-semibold text-ink">{account.name}</span><Badge>{account.instrument}</Badge><Badge tone={account.status === "active" ? "up" : "mute"}>{account.status}</Badge></span>}
-      action={<span className="num text-sm">{fmtUsd(s.equity)}</span>}
+      action={
+        <span className="flex items-center gap-2">
+          <span className="num text-sm">{fmtUsd(s.equity)}</span>
+          <button className="grid h-9 w-9 place-items-center rounded-full border border-line text-mute hover:border-down/40 hover:bg-down/10 hover:text-down" onClick={() => { setTyped(""); setConfirmDel(true); }} aria-label={`Delete ${account.name}`} title="Delete account">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+          </button>
+        </span>
+      }
     >
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Name"><input className="input" maxLength={120} value={a.name} onChange={(e) => setA({ ...a, name: e.target.value })} /></Field>
@@ -203,7 +211,7 @@ function AccountEditor({ account }: { account: Account }) {
       <Field label="Notes"><textarea className="input mt-4 min-h-16" maxLength={4000} value={a.notes ?? ""} onChange={(e) => setA({ ...a, notes: e.target.value })} /></Field>
       {err && <p className="mt-2 text-sm text-down">{err}</p>}
       <div className="mt-3 flex items-center justify-between gap-3">
-        <button className="text-xs text-mute hover:text-down" onClick={() => { setTyped(""); setConfirmDel(true); }}>Delete account…</button>
+        <button className="btn h-10 min-h-0 border border-down/40 px-3 text-sm text-down hover:bg-down/10" onClick={() => { setTyped(""); setConfirmDel(true); }}>Delete account</button>
         <div className="flex items-center gap-3">
           <span className={`text-xs ${dirty ? "text-accent" : "text-mute"}`}>{dirty ? "Unsaved changes" : state === "saved" ? "Saved" : ""}</span>
           {dirty && <button className="btn-ghost" onClick={() => { setA(account); setLadder(account.risk_ladder ?? []); }}>Discard</button>}
@@ -252,7 +260,7 @@ function AccountEditor({ account }: { account: Account }) {
               {myAdj.map((x) => (
                 <li key={x.id} className="flex items-center justify-between py-1.5">
                   <span className="num">{x.at.slice(0, 10)} · <span className={x.amount >= 0 ? "text-up" : "text-down"}>{fmtUsd(x.amount, true)}</span> {x.note && <span className="text-mute">· {x.note}</span>}</span>
-                  <button className="text-xs text-mute hover:text-down" onClick={async () => { if (!confirm("Delete this adjustment?")) return; await supabase.from("balance_adjustments").delete().eq("id", x.id); refresh(); }}>Delete</button>
+                  <button className="text-xs text-mute hover:text-down" onClick={async () => { if (!(await confirmDialog({ title: "Delete this adjustment?", body: "Equity goes back to what your trades and payouts imply.", danger: true }))) return; await supabase.from("balance_adjustments").delete().eq("id", x.id); refresh(); }}>Delete</button>
                 </li>
               ))}
             </ul>
@@ -299,7 +307,7 @@ function Setups() {
     refresh();
   }
   async function remove(s: Setup) {
-    if (!confirm(`Delete setup “${s.name}”? Trades keep their data but lose the setup tag.`)) return;
+    if (!(await confirmDialog({ title: `Delete setup “${s.name}”?`, body: "Trades keep their data but lose the setup tag.", danger: true }))) return;
     await supabase.from("setups").delete().eq("id", s.id);
     refresh();
   }
