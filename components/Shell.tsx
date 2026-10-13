@@ -7,7 +7,8 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { todayIST } from "@/lib/calc";
 import type { Account, Adjustment, Checkin, DayPlan, Lesson, Memory, Payout, Reminder, Review, Setup, Trade } from "@/lib/types";
-import { Logo } from "@/components/Brand";
+import { Logo, Mark } from "@/components/Brand";
+import AskBar from "@/components/AskBar";
 import CommandPalette from "@/components/CommandPalette";
 import ReminderCenter from "@/components/Reminders";
 
@@ -75,7 +76,7 @@ export function useTheme(): [Theme, (t: Theme) => void] {
   return [theme, apply];
 }
 
-export function ThemeToggle({ compact = false }: { compact?: boolean }) {
+export function ThemeToggle({ compact = false, rail = false }: { compact?: boolean; rail?: boolean }) {
   const [theme, setTheme] = useTheme();
   const next: Theme = theme === "dark" ? "light" : theme === "light" ? "system" : "dark";
   const icon =
@@ -83,7 +84,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
     : theme === "light" ? "M12 4V2M12 22v-2M4 12H2M22 12h-2M5.6 5.6 4.2 4.2M19.8 19.8l-1.4-1.4M5.6 18.4l-1.4 1.4M19.8 4.2l-1.4 1.4M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z"
     : "M4 5h16v11H4zM8 20h8M12 16v4";
   return (
-    <button onClick={() => setTheme(next)} className={compact ? "grid h-9 w-9 place-items-center rounded-lg text-mute hover:bg-raised hover:text-ink" : "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-mute hover:bg-raised hover:text-ink"} aria-label={`Theme: ${theme}. Switch to ${next}`} title={`Theme: ${theme}`}>
+    <button onClick={() => setTheme(next)} className={rail ? "grid h-11 w-11 place-items-center rounded-[14px] text-[#9AA0AA] hover:bg-white/10 hover:text-white" : compact ? "grid h-10 w-10 place-items-center rounded-full bg-panel text-mute hover:text-ink" : "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-mute hover:bg-raised hover:text-ink"} aria-label={`Theme: ${theme}. Switch to ${next}`} title={`Theme: ${theme}`}>
       <Icon d={icon} />
       {!compact && <span className="capitalize">{theme} theme</span>}
     </button>
@@ -181,92 +182,131 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   if (data.accounts.length === 0) return <Onboard onDone={refresh} />;
 
   const active = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+  const name = (session.user.user_metadata?.name as string | undefined)?.trim() || "";
 
   return (
     <Ctx.Provider value={value}>
-      <div className="flex min-h-screen">
-        {/* Desktop sidebar */}
-        <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-line bg-panel/60 px-3 py-4 md:flex">
-          <Link href="/" className="mb-5 flex items-center gap-2.5 px-2">
-            <Logo className="h-8 w-8" />
-            <span className="font-semibold tracking-tight"><span className="text-accent">A+</span> TradePlay</span>
-          </Link>
-          <nav className="flex flex-col gap-0.5" aria-label="Main">
-            {NAV.map((n) => (
-              <Link
-                key={n.href}
-                href={n.href}
-                className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition ${active(n.href) ? "bg-raised font-medium text-ink" : "text-mute hover:bg-raised/60 hover:text-ink"}`}
-              >
-                <Icon d={n.icon} className={`h-4 w-4 ${active(n.href) && n.href === "/coach" ? "text-accent" : ""}`} />
-                {n.label}
-              </Link>
-            ))}
-          </nav>
-          <div className="flex-1" />
-          <button onClick={() => setPalette(true)} className="mb-2 flex items-center justify-between rounded-lg border border-line px-2.5 py-2 text-xs text-mute hover:text-ink">
-            <span>Search &amp; actions</span>
-            <kbd className="num rounded border border-line px-1.5 text-[10px]">⌘K</kbd>
-          </button>
-          <ThemeToggle />
-          <button onClick={() => supabase.auth.signOut()} className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-mute hover:bg-raised hover:text-ink">
-            <Icon d="M15 4h4v16h-4M10 17l5-5-5-5M15 12H3" /> Sign out
-          </button>
-        </aside>
-
-        <div className="flex min-w-0 flex-1 flex-col">
-          {/* Mobile header */}
-          <header className="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-bg/85 px-4 py-2.5 backdrop-blur md:hidden">
-            <Link href="/" className="flex items-center gap-2">
-              <Logo className="h-7 w-7" />
-              <span className="text-[15px] font-semibold tracking-tight"><span className="text-accent">A+</span> TradePlay</span>
+      <div className="min-h-screen md:p-4">
+        <div className="flex min-h-[calc(100vh-2rem)] gap-5">
+          {/* Desktop: floating icon rail */}
+          <aside className="sticky top-4 hidden h-[calc(100vh-2rem)] w-[76px] shrink-0 flex-col items-center gap-1.5 rounded-[26px] bg-rail py-4 md:flex">
+            <Link href="/" className="mb-4 grid h-11 w-11 place-items-center" aria-label="A+ TradePlay home">
+              <Mark className="h-9 w-9" />
             </Link>
-            <div className="flex items-center gap-1">
-              <ReminderCenter compact />
-              <button onClick={() => setPalette(true)} className="grid h-9 w-9 place-items-center rounded-lg text-mute hover:bg-raised" aria-label="Search and actions">
-                <Icon d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-4.3-4.3" />
-              </button>
-              <ThemeToggle compact />
-            </div>
-          </header>
-          <div className="hidden justify-end px-8 pt-4 md:flex">
-            <ReminderCenter />
+            <nav className="flex flex-col items-center gap-1.5" aria-label="Main">
+              {NAV.map((n) => (
+                <Link
+                  key={n.href}
+                  href={n.href}
+                  aria-label={n.label}
+                  className={`group relative grid h-11 w-11 place-items-center rounded-[14px] transition ${active(n.href) ? "bg-[#F3F4F6] text-[#0B0B0D]" : "text-[#9AA0AA] hover:bg-white/10 hover:text-white"}`}
+                >
+                  <Icon d={n.icon} className="h-5 w-5" />
+                  <span className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-solid px-2.5 py-1 text-xs font-medium text-solid-ink opacity-0 shadow-lg transition group-hover:opacity-100">{n.label}</span>
+                </Link>
+              ))}
+            </nav>
+            <div className="flex-1" />
+            <RailButton label="Theme" onClick={() => {}}>
+              <ThemeToggle compact rail />
+            </RailButton>
+            <button onClick={() => supabase.auth.signOut()} aria-label="Sign out" className="group relative grid h-11 w-11 place-items-center rounded-[14px] text-[#9AA0AA] hover:bg-white/10 hover:text-white">
+              <Icon d="M15 4h4v16h-4M10 17l5-5-5-5M15 12H3" className="h-5 w-5" />
+              <span className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-lg bg-solid px-2.5 py-1 text-xs font-medium text-solid-ink opacity-0 shadow-lg transition group-hover:opacity-100">Sign out</span>
+            </button>
+          </aside>
+
+          <div className="flex min-w-0 flex-1 flex-col">
+            {/* Top bar */}
+            <header className="sticky top-0 z-20 flex items-center justify-between gap-3 bg-bg/85 px-4 py-3 backdrop-blur md:static md:bg-transparent md:px-2 md:py-1 md:backdrop-blur-none">
+              <Link href="/" className="flex items-center gap-2 md:hidden">
+                <Logo className="h-8 w-8" />
+                <span className="text-[15px] font-semibold tracking-tight"><span className="text-accent">A+</span> TradePlay</span>
+              </Link>
+              <div className="hidden text-sm text-mute md:block">
+                {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" })}
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setPalette(true)} className="hidden h-11 items-center gap-3 rounded-full bg-panel px-4 text-sm text-mute shadow-[var(--shadow)] hover:text-ink sm:flex" aria-label="Search and actions">
+                  <Icon d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-4.3-4.3" />
+                  Search
+                  <kbd className="num rounded-md bg-raised px-1.5 text-[10px]">⌘K</kbd>
+                </button>
+                <button onClick={() => setPalette(true)} className="grid h-10 w-10 place-items-center rounded-full bg-panel text-mute sm:hidden" aria-label="Search and actions">
+                  <Icon d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-4.3-4.3" />
+                </button>
+                <ReminderCenter compact />
+                <span className="md:hidden"><ThemeToggle compact /></span>
+                <ProfileButton name={name} email={session.user.email ?? ""} />
+              </div>
+            </header>
+            <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 pb-36 pt-3 sm:px-6 md:px-2 md:pb-28">{children}</main>
           </div>
-          <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-28 pt-5 sm:px-6 md:px-8 md:pb-12 md:pt-2">{children}</main>
         </div>
       </div>
 
+      {pathname !== "/coach" && <AskBar />}
+
       {/* Mobile bottom nav */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden" aria-label="Main">
+      <nav className="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-30 grid grid-cols-5 rounded-[22px] bg-rail px-1 shadow-2xl md:hidden" aria-label="Main">
         {NAV.filter((n) => MOBILE.includes(n.href)).map((n) => (
-          <Link key={n.href} href={n.href} className={`flex flex-col items-center gap-1 py-2.5 text-[10px] ${active(n.href) ? "text-ink" : "text-mute"}`}>
+          <Link key={n.href} href={n.href} className={`flex flex-col items-center gap-1 py-2.5 text-[10px] ${active(n.href) ? "text-white" : "text-[#9AA0AA]"}`}>
             {n.href === "/new" ? (
-              <span className="grid h-7 w-7 place-items-center rounded-full bg-accent text-accent-ink"><Icon d={n.icon} className="h-4 w-4" /></span>
+              <span className="grid h-7 w-7 place-items-center rounded-full bg-[#F2C14E] text-[#141518]"><Icon d={n.icon} className="h-4 w-4" /></span>
             ) : (
-              <Icon d={n.icon} className={`h-5 w-5 ${n.href === "/coach" && active(n.href) ? "text-accent" : ""}`} />
+              <Icon d={n.icon} className="h-5 w-5" />
             )}
             {n.label.replace(" trade", "")}
           </Link>
         ))}
-        <button onClick={() => setMore((v) => !v)} className={`flex flex-col items-center gap-1 py-2.5 text-[10px] ${more ? "text-ink" : "text-mute"}`} aria-expanded={more}>
+        <button onClick={() => setMore((v) => !v)} className={`flex flex-col items-center gap-1 py-2.5 text-[10px] ${more ? "text-white" : "text-[#9AA0AA]"}`} aria-expanded={more}>
           <Icon d="M4 6h16M4 12h16M4 18h16" className="h-5 w-5" />
           More
         </button>
       </nav>
       {more && (
-        <div className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 card p-2 shadow-2xl md:hidden">
+        <div className="fixed inset-x-3 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 card p-2 shadow-2xl md:hidden">
           {NAV.filter((n) => !MOBILE.includes(n.href)).map((n) => (
-            <Link key={n.href} href={n.href} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm hover:bg-raised">
+            <Link key={n.href} href={n.href} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm hover:bg-raised">
               <Icon d={n.icon} /> {n.label}
             </Link>
           ))}
-          <button onClick={() => supabase.auth.signOut()} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-sm text-mute hover:bg-raised">
+          <button onClick={() => supabase.auth.signOut()} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-mute hover:bg-raised">
             <Icon d="M15 4h4v16h-4M10 17l5-5-5-5M15 12H3" /> Sign out
           </button>
         </div>
       )}
       <CommandPalette open={palette} onClose={() => setPalette(false)} go={(href) => { setPalette(false); router.push(href); }} />
     </Ctx.Provider>
+  );
+}
+
+function RailButton({ label, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <div className="group relative">
+      {children}
+      <span className="pointer-events-none absolute left-full top-1/2 ml-3 -translate-y-1/2 whitespace-nowrap rounded-lg bg-solid px-2.5 py-1 text-xs font-medium text-solid-ink opacity-0 shadow-lg transition group-hover:opacity-100">{label}</span>
+    </div>
+  );
+}
+
+/** Avatar with your initial; click to set the name used in the greeting (stored in your auth profile). */
+function ProfileButton({ name, email }: { name: string; email: string }) {
+  const initial = (name || email || "A").trim().charAt(0).toUpperCase();
+  return (
+    <button
+      className="grid h-10 w-10 place-items-center rounded-full bg-[#F2C14E] text-sm font-bold text-[#141518] sm:h-11 sm:w-11"
+      title={name ? `${name} — click to rename` : "Set your name"}
+      aria-label="Profile name"
+      onClick={async () => {
+        const v = window.prompt("What should the app call you?", name);
+        if (v == null) return;
+        await supabase.auth.updateUser({ data: { name: v.trim().slice(0, 40) } });
+        await supabase.auth.refreshSession();
+      }}
+    >
+      {initial}
+    </button>
   );
 }
 

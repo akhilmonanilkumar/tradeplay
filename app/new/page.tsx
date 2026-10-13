@@ -335,7 +335,7 @@ export default function NewTrade() {
         <div className="space-y-4 lg:col-span-2">
           <section className="coach p-4">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="flex items-center gap-2 text-sm font-semibold"><Sparkle className="h-4 w-4 text-accent" /> Coach check</h2>
+              <h2 className="flex items-center gap-2 text-sm font-semibold"><Sparkle className="h-4 w-4 text-chart" /> Coach check</h2>
               {coach?.enabled && <button className="btn-ghost h-8 min-h-0 text-xs" onClick={runCheck} disabled={checking || !valid}>{checking ? "Checking…" : check ? "Re-check" : "Check this trade"}</button>}
             </div>
             {check?.error && <p className="mt-2 text-sm text-down">{check.error}</p>}

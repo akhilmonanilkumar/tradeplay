@@ -130,7 +130,7 @@ function Chat({ threadId, status, onThread }: { threadId: string | null; status:
     <section className="card flex min-h-[calc(100vh-7rem)] flex-col">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
         <div className="flex items-center gap-2 font-medium">
-          <Sparkle className="h-4 w-4 text-accent" /> Coach
+          <Sparkle className="h-4 w-4 text-chart" /> Coach
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {status?.webSearch && (
@@ -160,7 +160,7 @@ function Chat({ threadId, status, onThread }: { threadId: string | null; status:
         {status && !status.enabled && <CoachSetupNote />}
         {msgs.length === 0 && status?.enabled && (
           <div className="mx-auto max-w-xl py-6 text-center">
-            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-accent/15 text-accent"><Sparkle className="h-6 w-6" /></div>
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-chart/15 text-chart"><Sparkle className="h-6 w-6" /></div>
             <h2 className="mt-4 text-lg font-semibold">Plan, research, reflect</h2>
             <p className="mt-1 text-sm text-mute">The coach sees your accounts, guardrails, plans, trades, lessons, memory and knowledgebase. It proposes; you apply.</p>
             <div className="mt-5 grid gap-2 sm:grid-cols-2">

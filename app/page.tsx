@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useData } from "@/components/Shell";
 import { Badge, Card, Meter, Stat } from "@/components/ui";
 import TradeModal from "@/components/TradeModal";
-import { ActionsPanel, CheckinCard, DontRepeat, OutlookCard, QuoteHero, Snapshot } from "@/components/TodayWidgets";
+import { CheckinCard, DontRepeat, OutlookCard } from "@/components/TodayWidgets";
+import { DailyPnl, Greeting, NextEventCard, OverallScore, PnlCurve, ScorePanel, StartDay, StatusCard, TodoList, TradesTable } from "@/components/TodayDash";
 import { EconWeek, MarketPanel, useMarket } from "@/components/Market";
 import {
   accountState, fmtIST, fmtPct, fmtR, fmtUsd, msToWindow, newsBlock, sessionAt, todayIST, windowLabel,
@@ -32,6 +33,7 @@ export default function Today() {
   const market = useMarket();
   const now = useNow();
   const [edit, setEdit] = useState<Trade | null>(null);
+  const [startDay, setStartDay] = useState(false);
   const active = accounts.filter((a) => a.status === "active");
   const session = sessionAt(now);
   const open = trades.filter((t) => t.status === "open");
@@ -51,34 +53,19 @@ export default function Today() {
 
   return (
     <>
-      <QuoteHero now={now} />
+      <Greeting now={now} onStart={() => setStartDay(true)} />
 
-      <div className="mb-4 mt-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-[26px] font-semibold tracking-tight sm:text-[28px]">
-            {slots === 0 ? "No A+ slots open. Protect the account." : `${slots} A+ slot${slots > 1 ? "s" : ""}. Stay patient.`}
-          </h1>
-          <p className="mt-1 text-sm text-mute">
-            {fmtIST(now, false)} IST · <span className={session.inWindow ? "text-up" : ""}>{session.inWindow ? `${session.name} Q-zone open` : "Off-session"}</span>
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/plan" className="btn-ghost">Plan</Link>
-          <Link href="/new" className="btn-accent">+ New trade</Link>
-        </div>
-      </div>
-
-      <Snapshot now={now} />
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2"><OutlookCard /></div>
-        <div className="space-y-4">
-          <ActionsPanel now={now} />
-          <CheckinCard now={now} />
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-5">
+          <div className="grid gap-5 lg:grid-cols-12">
+            <div className="lg:col-span-4"><ScorePanel now={now} /></div>
+            <div className="lg:col-span-8"><PnlCurve now={now} /></div>
+            <div className="lg:col-span-4"><DailyPnl now={now} /></div>
+            <div className="lg:col-span-4"><OverallScore now={now} /></div>
+            <div className="lg:col-span-4"><TradesTable onOpen={setEdit} /></div>
+          </div>
+          <div id="outlook" className="scroll-mt-20"><OutlookCard /></div>
+      <div className="grid gap-5 lg:grid-cols-2">
         {states.map(({ a, plan, s }) => {
           const news = newsBlock(plan, now);
           const planDone = plan && Object.values(plan.checklist ?? {}).filter(Boolean).length >= 6;
@@ -151,35 +138,15 @@ export default function Today() {
         })}
       </div>
 
-      <div className="mt-4"><EconWeek market={market} /></div>
+          <div id="calendar" className="scroll-mt-20"><EconWeek market={market} /></div>
+          <MarketPanel market={market} />
+        </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2"><MarketPanel market={market} /></div>
-        <div className="space-y-4">
-          <Card title="Open positions">
-            {open.length === 0 ? (
-              <p className="text-sm text-mute">No open trades.</p>
-            ) : (
-              <ul className="divide-y divide-line">
-                {open.map((t) => {
-                  const acct = accounts.find((a) => a.id === t.account_id);
-                  return (
-                    <li key={t.id} className="py-2.5 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Badge tone={t.direction === "long" ? "up" : "down"}>{t.direction.toUpperCase()}</Badge>
-                        <span className="truncate font-medium">{t.instrument}</span>
-                        <span className="truncate text-xs text-mute">{acct?.name}</span>
-                      </div>
-                      <div className="num mt-0.5 text-xs text-mute">{t.entry} · SL {t.sl} · TP {t.tp} · {fmtR(t.rr_planned)} · {fmtUsd(t.risk_usd)}</div>
-                      <div className="mt-2 flex gap-2">
-                        <button className="btn-ghost h-8 min-h-0 flex-1 text-xs" onClick={() => setEdit(t)}>Manage / close</button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Card>
+        <aside className="space-y-5">
+          <StatusCard now={now} />
+          <TodoList now={now} />
+          <NextEventCard events={market.data?.events ?? []} now={now} />
+          <CheckinCard now={now} />
           <DontRepeat />
           {breaksToday.length > 0 && (
             <Card title="Rule breaks today">
@@ -196,10 +163,11 @@ export default function Today() {
               </ul>
             </Card>
           )}
-        </div>
+        </aside>
       </div>
 
       <TradeModal trade={edit} onClose={() => setEdit(null)} />
+      <StartDay open={startDay} onClose={() => setStartDay(false)} now={now} />
     </>
   );
 }

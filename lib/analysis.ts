@@ -555,3 +555,34 @@ export function emotionStats(trades: Trade[]) {
     total: c.length,
   };
 }
+
+/* =====================================================================
+ * Overall score (radar): six process/outcome axes normalised 0–1
+ * ===================================================================== */
+
+export type ScoreAxis = { key: string; label: string; value: number; raw: string };
+
+export function scoreAxes(trades: Trade[], disciplinePct: number | null): ScoreAxis[] {
+  const c = closedSorted(trades);
+  const n = c.length;
+  const rs = c.map((t) => Number(t.r_multiple));
+  const wins = rs.filter((r) => r > 0), losses = rs.filter((r) => r < 0);
+  const winRate = n ? wins.length / n : 0;
+  const gw = wins.reduce((s, r) => s + r, 0), gl = Math.abs(losses.reduce((s, r) => s + r, 0));
+  const pf = gl ? gw / gl : gw ? 3 : 0;
+  const avgW = wins.length ? gw / wins.length : 0, avgL = losses.length ? gl / losses.length : 1;
+  const days = new Map<string, number>();
+  for (const t of c) days.set(todayIST(new Date(t.closed_at ?? t.opened_at)), (days.get(todayIST(new Date(t.closed_at ?? t.opened_at))) ?? 0) + Number(t.r_multiple));
+  const green = days.size ? [...days.values()].filter((v) => v > 0).length / days.size : 0;
+  let cum = 0, peak = 0, dd = 0;
+  for (const r of rs) { cum += r; peak = Math.max(peak, cum); dd = Math.max(dd, peak - cum); }
+  const clamp = (x: number) => Math.max(0, Math.min(1, x));
+  return [
+    { key: "win", label: "Win %", value: clamp(winRate / 0.5), raw: `${Math.round(winRate * 100)}%` },
+    { key: "pf", label: "Profit factor", value: clamp(pf / 2.5), raw: pf.toFixed(2) },
+    { key: "rr", label: "Win/loss", value: clamp(avgW / avgL / 4), raw: `${(avgW / avgL).toFixed(1)}×` },
+    { key: "dd", label: "Drawdown", value: n ? clamp(1 - dd / 10) : 0, raw: `${dd.toFixed(1)}R` },
+    { key: "disc", label: "Discipline", value: clamp((disciplinePct ?? 0) / 100), raw: disciplinePct == null ? "—" : String(disciplinePct) },
+    { key: "cons", label: "Consistency", value: clamp(green / 0.6), raw: `${Math.round(green * 100)}% green` },
+  ];
+}

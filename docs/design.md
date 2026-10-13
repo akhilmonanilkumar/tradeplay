@@ -13,17 +13,22 @@ The design concepts live in Claude Design (the "A+ TradePlay redesign" canvas): 
   - `og.png` (1200×630, used for link previews)
   - React: `components/Brand.tsx` → `<Logo />`
 
+## Layout language (v2.1 — soft bento)
+Inspired by the references you liked: a floating **icon rail** (black pill, tooltips), a big greeting with **Start my day**, borderless rounded cards (22–26 px) on a soft grey canvas, a **gradient score gauge**, smooth **violet spline** for cumulative P&L, green/red daily bars, a **radar** "overall score" (last 30 days vs prior 30, dashed), a right rail with a **black status card**, a **to-do list** with black icon tiles and a black next-event card, and a floating glass **Ask anything** AI bar on every page.
+
 ## Tokens (`app/globals.css`)
 Colours are stored as `R G B` CSS variables so Tailwind opacity modifiers work (`bg-accent/10`).
 
 | Token | Dark (default) | Light | Use |
 |---|---|---|---|
-| `bg` | `#0A0B0D` | `#F6F6F3` | Page |
-| `panel` | `#121317` | `#FFFFFF` | Cards |
-| `raised` | `#1A1C21` | `#F0F0EC` | Inputs, hovers, tiles |
-| `line` | `#24262C` | `#E2E2DC` | Borders |
-| `ink` | `#ECEDF0` | `#141518` | Text |
-| `mute` | `#8B909A` | `#5B5F67` | Secondary text |
+| `bg` | `#0B0C0F` | `#EEF1F5` | Canvas |
+| `panel` | `#15161B` | `#FFFFFF` | Cards (no border in light, soft shadow) |
+| `raised` | `#1E2026` | `#F1F3F7` | Inputs, icon tiles, chips |
+| `line` | `#262830` | `#E5E7EB` | Dividers, grid lines |
+| `rail` / `solid` | `#15161B` / `#ECEDF0` | `#0B0B0D` / `#0B0B0D` | Icon rail, status cards / primary buttons, tooltips |
+| `chart` | `#A78BFA` | `#8B5CF6` | Curves, radar, AI surfaces |
+| `ink` | `#ECEDF0` | `#121316` | Text |
+| `mute` | `#8B909A` | `#6B7280` | Secondary text |
 | `accent` | `#F2C14E` (gold) | `#9A6F00` | A+ / coach / focus |
 | `up` | `#34D399` | `#0F8A5F` | Profit |
 | `down` | `#FB7185` | `#C8304D` | Loss, blocks |

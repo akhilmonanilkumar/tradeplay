@@ -117,7 +117,7 @@ export function TradeDiagnosis({ trade }: { trade: Trade }) {
     return (
       <div className="coach p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="flex items-center gap-1.5 text-sm font-medium"><Sparkle className="h-4 w-4 text-accent" /> In-trade guidance</span>
+          <span className="flex items-center gap-1.5 text-sm font-medium"><Sparkle className="h-4 w-4 text-chart" /> In-trade guidance</span>
           <span className="flex-1" />
           {status?.enabled ? (
             <>
@@ -137,7 +137,7 @@ export function TradeDiagnosis({ trade }: { trade: Trade }) {
   return (
     <div className="coach p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="flex items-center gap-1.5 text-sm font-medium"><Sparkle className="h-4 w-4 text-accent" /> Why did this {d.outcome === "win" ? "win" : d.outcome === "loss" ? "lose" : "scratch"}?</span>
+        <span className="flex items-center gap-1.5 text-sm font-medium"><Sparkle className="h-4 w-4 text-chart" /> Why did this {d.outcome === "win" ? "win" : d.outcome === "loss" ? "lose" : "scratch"}?</span>
         <span className="flex-1" />
         {status?.enabled && coachDb && (
           <button className="btn-ghost h-8 min-h-0 text-xs" disabled={busy} onClick={async () => { setBusy(true); setAi((await askCoach("analyze", { payload: { trade_id: trade.id } })) as Analysis); setBusy(false); }}>

@@ -9,3 +9,13 @@ export function Logo({ className = "h-8 w-8", title = "A+ TradePlay" }: { classN
     </svg>
   );
 }
+
+/** Bare mark (no tile) for dark surfaces like the icon rail. */
+export function Mark({ className = "h-8 w-8" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" className={className} aria-hidden>
+      <path d="M13 49 L28 15 L43 49" fill="none" stroke="#ECEDF0" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M50 10 L50 28 M41 19 L59 19" fill="none" stroke="#F2C14E" strokeWidth="7" strokeLinecap="round" />
+    </svg>
+  );
+}

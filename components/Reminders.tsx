@@ -73,7 +73,7 @@ export default function ReminderCenter({ compact = false }: { compact?: boolean 
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className={`relative grid place-items-center rounded-lg text-mute hover:bg-raised hover:text-ink ${compact ? "h-9 w-9" : "h-9 gap-2 px-3 text-sm"}`}
+        className={`relative grid place-items-center text-mute hover:text-ink ${compact ? "h-10 w-10 rounded-full bg-panel shadow-[var(--shadow)] sm:h-11 sm:w-11" : "h-9 gap-2 rounded-lg px-3 text-sm hover:bg-raised"}`}
         aria-label={`Reminders (${list.length})`}
         aria-expanded={open}
       >

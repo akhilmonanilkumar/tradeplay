@@ -294,7 +294,7 @@ export function OutlookCard() {
   return (
     <section className="coach p-4 sm:p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-sm font-semibold"><Sparkle className="h-4 w-4 text-accent" /> Today's outlook — our way</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold"><Sparkle className="h-4 w-4 text-chart" /> Today's outlook — our way</h2>
         {status?.enabled && coachDb && (
           <div className="flex items-center gap-2 text-xs text-mute">
             {res?.created_at ? <span>{res.cached ? "Generated" : "Updated"} {fmtIST(String(res.created_at), false)}</span> : null}

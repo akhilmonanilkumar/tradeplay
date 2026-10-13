@@ -7,7 +7,7 @@ export function Card({ title, action, children, className = "" }: { title?: Reac
     <section className={`card p-4 sm:p-5 ${className}`}>
       {(title || action) && (
         <div className="mb-3 flex items-center justify-between gap-3">
-          {title && <h2 className="label">{title}</h2>}
+          {title && <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>}
           {action}
         </div>
       )}
