@@ -83,11 +83,11 @@ export function pickModel(id?: string | null): ModelRef | null {
   return all[0] ?? null;
 }
 
-/** Fallback chain for OpenRouter: chosen model first, then OPENROUTER_FALLBACKS (default: free presets). Max 3 extra. */
+/** Fallback chain for OpenRouter: chosen model first, then OPENROUTER_FALLBACKS (default: free presets). OpenRouter allows 3 entries total. */
 function orModels(primary: string): string[] {
   const conf = env("OPENROUTER_FALLBACKS");
   const list = conf ? conf.split(",").map((x) => x.trim()).filter((x) => OR_SLUG.test(x)) : OPENROUTER_FREE.map((f) => f.slug);
-  return [primary, ...list.filter((x) => x !== primary)].slice(0, 4);
+  return [primary, ...list.filter((x) => x !== primary)].slice(0, 3);
 }
 
 type CallOpts = {

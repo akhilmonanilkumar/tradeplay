@@ -43,7 +43,7 @@ With only `OPENROUTER_API_KEY` set, the app offers these free models (verified O
 | `nvidia/nemotron-3.5-lightning:free` | Fastest — voice parsing, quick answers |
 | `openrouter/free` | Router that auto-picks any capable free model |
 
-- **Fallbacks:** every request sends a `models` list (your pick + up to 3 others, from `OPENROUTER_FALLBACKS` or the presets above), so a busy or rate-limited free model is skipped automatically.
+- **Fallbacks:** every request sends a `models` list (your pick + up to 2 others (OpenRouter allows 3 in total), from `OPENROUTER_FALLBACKS` or the presets above), so a busy or rate-limited free model is skipped automatically.
 - **Limits:** free variants are 20 requests/min and 50/day per account; buying $10 of credits once raises it to 1,000/day. Today's outlook and the morning brief are cached daily, so normal use fits easily.
 - **Web research** on OpenRouter uses the paid `web` plugin (billed to credits); leave it off for free-only use.
 - Paid models (Claude, GPT, DeepSeek, Qwen…) work through the same key — just pick them in Engine.
